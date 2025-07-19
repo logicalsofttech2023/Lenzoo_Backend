@@ -6,6 +6,12 @@ import path from "path";
 import crypto from "crypto";
 import Transaction from "../models/TransactionModel.js";
 import { addNotification } from "../utils/AddNotification.js";
+import Membership from "../models/MembershipModel.js";
+import Purchase from "../models/Purchase.js";
+import Product from "../models/Product.js";
+import Favorite from "../models/Favorite.js";
+import { calculateEndDate } from "../utils/dateUtils.js";
+import Prescription from "../models/PrescriptionModel.js";
 
 const generateJwtToken = (user) => {
   return jwt.sign(
@@ -289,5 +295,266 @@ export const addMoneyToWallet = async (req, res) => {
   } catch (error) {
     console.error("Error in addMoneyToWallet:", error);
     res.status(500).json({ message: "Server Error", status: false });
+  }
+};
+
+export const createPurchase = async (req, res) => {
+  try {
+    const { userId, membershipId, amount } = req.body;
+
+    if (!userId || !membershipId || !amount) {
+      return res
+        .status(400)
+        .json({ message: "Missing required fields", status: false });
+    }
+
+    const membership = await Membership.findById(membershipId);
+    if (!membership) {
+      return res
+        .status(404)
+        .json({ message: "Membership not found", status: false });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found", status: false });
+    }
+
+    const startDate = new Date();
+    const endDate = calculateEndDate(startDate, membership.durationInDays);
+
+    const purchase = new Purchase({
+      userId,
+      membershipId,
+      amount,
+      type: "purchase",
+      startDate,
+      endDate,
+    });
+    await purchase.save();
+
+    const transactionId = generateTransactionId();
+    const transaction = new Transaction({
+      userId,
+      amount,
+      type: "purchase",
+      status: "success",
+      transactionId,
+      description: `Purchased membership: ${membership.title}`,
+    });
+    await transaction.save();
+
+    const title = "Membership Purchase Successful";
+    const body = `You have successfully purchased the ${membership.title} plan for ₹${amount}.`;
+
+    try {
+      await addNotification(userId, title, body);
+    } catch (notificationError) {
+      console.error("Notification Error:", notificationError);
+    }
+
+    res.status(201).json({
+      message: "Purchase successful",
+      status: true,
+      purchase,
+      transaction,
+    });
+  } catch (error) {
+    console.error("Error in createPurchase:", error);
+    res.status(500).json({ message: "Internal Server Error", status: false });
+  }
+};
+
+export const renewMembership = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { membershipId, amount } = req.body;
+
+    if (!membershipId || !amount) {
+      return res
+        .status(400)
+        .json({ message: "Missing required fields", status: false });
+    }
+
+    const membership = await Membership.findById(membershipId);
+    if (!membership) {
+      return res
+        .status(404)
+        .json({ message: "Membership not found", status: false });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found", status: false });
+    }
+
+    const startDate = new Date();
+    const endDate = calculateEndDate(startDate, membership.durationInDays);
+
+    const renewedPurchase = new Purchase({
+      userId,
+      membershipId,
+      amount,
+      type: "renewal",
+      startDate,
+      endDate,
+    });
+    await renewedPurchase.save();
+
+    const transactionId = generateTransactionId();
+    const transaction = new Transaction({
+      userId,
+      amount,
+      type: "renewal",
+      status: "success",
+      transactionId,
+      description: `Renewed membership: ${membership.title}`,
+    });
+    await transaction.save();
+
+    const title = "Membership Renewed Successfully";
+    const body = `Your ${membership.title} plan has been renewed successfully for ₹${amount}.`;
+
+    try {
+      await addNotification(userId, title, body);
+    } catch (notificationError) {
+      console.error("Notification Error:", notificationError);
+    }
+
+    res.status(200).json({
+      message: "Membership renewed successfully",
+      status: true,
+      purchase: renewedPurchase,
+      transaction,
+    });
+  } catch (error) {
+    console.error("Error in renewMembership:", error);
+    res.status(500).json({ message: "Internal Server Error", status: false });
+  }
+};
+
+export const getMyPlan = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Find the most recent purchase for the user
+    const latestPurchase = await Purchase.findOne({ userId })
+      .sort({ createdAt: -1 })
+      .populate("membershipId");
+
+    if (!latestPurchase) {
+      return res.status(404).json({
+        message: "No membership plan found for this user",
+        status: false,
+      });
+    }
+
+    res.status(200).json({
+      status: true,
+      message: "Membership plan fetched successfully",
+      plan: latestPurchase,
+    });
+  } catch (error) {
+    console.error("Error in getMyPlan:", error);
+    res.status(500).json({ message: "Internal Server Error", status: false });
+  }
+};
+
+export const getAllProductsInUser = async (req, res) => {
+  try {
+    const products = await Product.find().sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      products,
+      message: "Products fetched successfully",
+    });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ success: false, message: "Server Error", error });
+  }
+};
+
+export const toggleFavoriteProduct = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { productId } = req.query;
+
+    const existingFavorite = await Favorite.findOne({ userId, productId });
+
+    if (existingFavorite) {
+      // Remove favorite
+      await Favorite.findByIdAndDelete(existingFavorite._id);
+      return res
+        .status(200)
+        .json({ success: true, message: "Product removed from favorites" });
+    } else {
+      // Add favorite
+      const newFavorite = new Favorite({ userId, productId });
+      await newFavorite.save();
+      return res
+        .status(200)
+        .json({ success: true, message: "Product added to favorites" });
+    }
+  } catch (error) {
+    console.error("❌ Toggle Favorite Error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error", error });
+  }
+};
+
+export const getUserFavorites = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const favorites = await Favorite.find({ userId }).populate("productId");
+
+    const favoriteProducts = favorites.map((fav) => fav.productId);
+
+    return res.status(200).json({
+      success: true,
+      favorites: favoriteProducts,
+      message: "Favorites fetched successfully",
+    });
+  } catch (error) {
+    console.error("❌ Fetch Favorites Error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error", error });
+  }
+};
+
+export const addPrescription = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { notes } = req.body;
+
+    if (!req.file) {
+      return res
+        .status(400)
+        .json({ message: "Prescription file is required", status: false });
+    }
+
+    // Clean and normalize the path to be relative: "uploads/filename.ext"
+    const relativePath = path
+      .join("uploads", path.basename(req.file.path))
+      .replace(/\\/g, "/");
+
+    const prescription = await Prescription.create({
+      userId,
+      notes,
+      prescriptionFile: relativePath,
+    });
+
+    res.status(201).json({
+      status: true,
+      message: "Prescription uploaded successfully",
+      data: prescription,
+    });
+  } catch (error) {
+    console.error("Error uploading prescription:", error);
+    res.status(500).json({ status: false, message: "Internal Server Error" });
   }
 };

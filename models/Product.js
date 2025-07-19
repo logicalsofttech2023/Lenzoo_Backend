@@ -47,7 +47,6 @@ const productSchema = new mongoose.Schema(
       required: true,
     },
 
-    // ✅ Product Details with Enums
     productType: {
       type: String,
       enum: [
@@ -94,7 +93,6 @@ const productSchema = new mongoose.Schema(
       required: true,
     },
 
-    // ✅ Optional Additional Frame Details
     frameWidth: {
       type: String, // e.g. "140 mm"
     },
@@ -102,7 +100,7 @@ const productSchema = new mongoose.Schema(
       type: String, // e.g. "52-18-140"
     },
     frameColor: {
-      type: String, // e.g. "Black", "Blue", "Transparent"
+      type: [String],
     },
     weight: {
       type: String, // e.g. "22g"
@@ -110,6 +108,12 @@ const productSchema = new mongoose.Schema(
     material: {
       type: String, // e.g. "Metal", "Plastic", "TR90", "Acetate"
     },
+    pupillaryDistance: {
+      type: String, // e.g. "55 mm"
+    },
+    faceShape: {
+      type: String, // e.g. "Round", "Oval", "Square"
+    }
   },
   {
     timestamps: true,

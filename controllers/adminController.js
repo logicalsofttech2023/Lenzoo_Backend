@@ -3,6 +3,11 @@ import Admin from "../models/AdminModel.js";
 import jwt from "jsonwebtoken";
 import Membership from "../models/MembershipModel.js";
 import Product from "../models/Product.js";
+import bcrypt from "bcrypt";
+import User from "../models/UserModel.js";
+import Purchase from "../models/Purchase.js";
+import Transaction from "../models/TransactionModel.js";
+import PrescriptionModel from "../models/PrescriptionModel.js";
 
 const generateJwtToken = (user) => {
   return jwt.sign(
@@ -179,13 +184,13 @@ export const getAllUsers = async (req, res) => {
     page = parseInt(page);
     limit = parseInt(limit);
 
-    let searchFilter = { role: "user", name: { $exists: true, $ne: "" } };
+    let searchFilter = { role: "user", firstName: { $exists: true, $ne: "" } };
     if (search) {
       searchFilter = {
         $or: [
-          { name: { $regex: search, $options: "i" } },
-          { email: { $regex: search, $options: "i" } },
-          { phone: { $regex: search, $options: "i" } },
+          { firstName: { $regex: search, $options: "i" } },
+          { lastName: { $regex: search, $options: "i" } },
+          { userEmail: { $regex: search, $options: "i" } },
         ],
       };
     }
@@ -217,6 +222,27 @@ export const getAllUsers = async (req, res) => {
       status: false,
       error: error.message,
     });
+  }
+};
+
+export const getUserByIdInAdmin = async (req, res) => {
+  try {
+    const userId = req.query.id;
+    let user = await User.findById(userId).select("-otp -otpExpiresAt");
+    let membership = await Purchase.find({ userId: userId })
+      .populate("membershipId")
+      .sort({ createdAt: -1 });
+    if (!user) {
+      return res.status(404).json({ message: "User not found", status: false });
+    }
+
+    res.status(200).json({
+      message: "User fetched successfully",
+      status: true,
+      data: { ...user, membership },
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server Error", status: false });
   }
 };
 
@@ -284,43 +310,81 @@ export const getPolicy = async (req, res) => {
 
 export const addUpdateMembership = async (req, res) => {
   try {
-    const { membershipId, planType, price, status } = req.body;
+    const {
+      title,
+      description,
+      membershipId,
+      planType,
+      price,
+      status,
+      benefits,
+      durationInDays,
+      isRecurring,
+    } = req.body;
 
-    if (!price || (!membershipId && !planType)) {
-      return res
-        .status(400)
-        .json({ message: "Missing required fields", status: false });
+    if (!title || !description || !planType || !price || !durationInDays) {
+      return res.status(400).json({
+        message: "Missing required fields",
+        status: false,
+      });
     }
 
     let membership;
 
     if (membershipId) {
-      // Update existing membership
+      // Update existing
       membership = await Membership.findById(membershipId);
 
       if (!membership) {
-        return res
-          .status(404)
-          .json({ message: "Membership not found", status: false });
+        return res.status(404).json({
+          message: "Membership not found",
+          status: false,
+        });
       }
 
-      membership.price = price;
+      membership.title = title ?? membership.title;
+      membership.description = description ?? membership.description;
+      membership.planType = planType ?? membership.planType;
+      membership.price = price ?? membership.price;
       membership.status = status ?? membership.status;
+      membership.benefits = benefits ?? membership.benefits;
+      membership.durationInDays = durationInDays ?? membership.durationInDays;
+      membership.isRecurring = isRecurring ?? membership.isRecurring;
+
       await membership.save();
-      return res
-        .status(200)
-        .json({ message: "Membership updated", membership, status: true });
+
+      return res.status(200).json({
+        message: "Membership updated",
+        membership,
+        status: true,
+      });
     } else {
-      // Add new membership
-      membership = new Membership({ planType, price, status });
-      await membership.save();
-      return res
-        .status(201)
-        .json({ message: "Membership created", membership, status: true });
+      // Create new
+      const newMembership = new Membership({
+        title,
+        description,
+        planType,
+        price,
+        status,
+        benefits,
+        durationInDays,
+        isRecurring,
+      });
+
+      await newMembership.save();
+
+      return res.status(201).json({
+        message: "Membership created",
+        membership: newMembership,
+        status: true,
+      });
     }
   } catch (error) {
     console.error("Error in addUpdateMembership:", error);
-    res.status(500).json({ message: "Internal server error", status: false });
+    return res.status(500).json({
+      message: "Internal server error",
+      status: false,
+    });
   }
 };
 
@@ -345,6 +409,43 @@ export const getAllMembership = async (req, res) => {
       error: error.message,
     });
   }
+};
+
+export const getMembershipById = async (req, res) => {
+  try {
+    const { id } = req.query;
+    if (!id) {
+      return res.status(400).json({ message: "Membership ID is required" });
+    }
+
+    const membership = await Membership.findById(id);
+    if (!membership) {
+      return res.status(404).json({ message: "Membership not found" });
+    }
+
+    res
+      .status(200)
+      .json({ message: "Membership fetched successfully", membership });
+  } catch (error) {
+    console.error("Error fetching membership:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const deleteMembership = async (req, res) => {
+  try {
+    const { id } = req.query;
+    if (!id) {
+      return res.status(400).json({ message: "Membership ID is required" });
+    }
+
+    const membership = await Membership.findByIdAndDelete(id);
+    if (!membership) {
+      return res.status(404).json({ message: "Membership not found" });
+    }
+
+    res.status(200).json({ message: "Membership deleted successfully" });
+  } catch (error) {}
 };
 
 export const addFAQ = async (req, res) => {
@@ -439,6 +540,8 @@ export const addProduct = async (req, res) => {
       frameColor,
       weight,
       material,
+      pupillaryDistance,
+      faceShape,
     } = req.body;
 
     let images = [];
@@ -481,6 +584,8 @@ export const addProduct = async (req, res) => {
       frameColor,
       weight,
       material,
+      pupillaryDistance,
+      faceShape,
     });
 
     await newProduct.save();
@@ -494,12 +599,80 @@ export const addProduct = async (req, res) => {
 
 export const getAllProducts = async (req, res) => {
   try {
-    const products = await Product.find().sort({ createdAt: -1 });
-    return res.status(200).json({ success: true, products });
+    const { search = "", page = 1, limit = 10 } = req.query;
+
+    const query = {
+      name: { $regex: search, $options: "i" },
+    };
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const [products, total] = await Promise.all([
+      Product.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
+      Product.countDocuments(query),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message: "Fetched products successfully",
+      data: products,
+      currentPage: parseInt(page),
+      totalPages: Math.ceil(total / limit),
+      totalItems: total,
+    });
   } catch (error) {
-    return res
-      .status(500)
-      .json({ success: false, message: "Server Error", error });
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching products",
+      error: error.message,
+    });
+  }
+};
+
+export const getAllProductsInAdmin = async (req, res) => {
+  try {
+    let { page = 1, limit = 10, search = "" } = req.query;
+    page = parseInt(page);
+    limit = parseInt(limit);
+
+    let searchFilter = {};
+
+    if (search) {
+      searchFilter = {
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { title: { $regex: search, $options: "i" } },
+          { productType: { $regex: search, $options: "i" } },
+          { frameType: { $regex: search, $options: "i" } },
+          { frameShape: { $regex: search, $options: "i" } },
+        ],
+      };
+    }
+
+    const products = await Product.find(searchFilter)
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .sort({ createdAt: -1 });
+
+    const totalProducts = await Product.countDocuments(searchFilter);
+
+    return res.status(200).json({
+      success: true,
+      message: "Products fetched successfully",
+      data: products,
+      totalProducts,
+      totalPages: Math.ceil(totalProducts / limit),
+      currentPage: page,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message,
+    });
   }
 };
 
@@ -552,6 +725,8 @@ export const updateProduct = async (req, res) => {
       frameColor,
       weight,
       material,
+      pupillaryDistance,
+      faceShape,
     } = req.body;
 
     // Validate required fields
@@ -594,6 +769,8 @@ export const updateProduct = async (req, res) => {
     product.frameColor = frameColor;
     product.weight = weight;
     product.material = material;
+    product.pupillaryDistance = pupillaryDistance;
+    product.faceShape = faceShape;
 
     // Append new images if any
     if (uploadedImages.length > 0) {
@@ -634,5 +811,111 @@ export const deleteProduct = async (req, res) => {
     return res
       .status(500)
       .json({ success: false, message: "Server Error", error });
+  }
+};
+
+export const getAllPurchases = async (req, res) => {
+  try {
+    const purchases = await Purchase.find()
+      .populate("userId membershipId")
+      .sort({ createdAt: -1 });
+    res.status(200).json({
+      purchases,
+      status: true,
+      message: "All purchases fetched successfully",
+    });
+  } catch (error) {
+    console.error("Error in getAllPurchases:", error);
+    res.status(500).json({ message: "Internal Server Error", status: false });
+  }
+};
+
+export const getAllTransaction = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search = "" } = req.query;
+
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+
+    // First, find matching user IDs if search keyword is provided
+    let userFilter = {};
+
+    if (search) {
+      const regex = new RegExp(search, "i");
+      const matchingUsers = await User.find({
+        $or: [{ firstName: regex }, { lastName: regex }],
+      }).select("_id");
+
+      const userIds = matchingUsers.map((user) => user._id);
+      userFilter.userId = { $in: userIds };
+    }
+
+    const totalTransactions = await Transaction.countDocuments(userFilter);
+
+    const transactions = await Transaction.find(userFilter)
+      .populate("userId")
+      .sort({ createdAt: -1 })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum);
+
+    return res.status(200).json({
+      message: "Transaction history fetched successfully",
+      status: true,
+      totalTransactions,
+      currentPage: pageNum,
+      totalPages: Math.ceil(totalTransactions / limitNum),
+      data: transactions,
+    });
+  } catch (error) {
+    console.error("Error fetching transaction history:", error);
+    return res.status(500).json({
+      message: "Server Error",
+      status: false,
+    });
+  }
+};
+
+export const getAllPrescription = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search = "" } = req.query;
+
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+
+    // First, find matching user IDs if search keyword is provided
+    let userFilter = {};
+
+    if (search) {
+      const regex = new RegExp(search, "i");
+      const matchingUsers = await User.find({
+        $or: [{ firstName: regex }, { lastName: regex }],
+      }).select("_id");
+
+      const userIds = matchingUsers.map((user) => user._id);
+      userFilter.userId = { $in: userIds };
+    }
+
+    const totalPrescriptions = await PrescriptionModel.countDocuments(userFilter);
+
+    const prescriptions = await PrescriptionModel.find(userFilter)
+      .populate("userId")
+      .sort({ createdAt: -1 })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum);
+
+    return res.status(200).json({
+      message: "Prescription fetched successfully",
+      status: true,
+      totalPrescriptions,
+      currentPage: pageNum,
+      totalPages: Math.ceil(totalPrescriptions / limitNum),
+      data: prescriptions,
+    });
+  } catch (error) {
+    console.error("Error fetching prescription:", error);
+    return res.status(500).json({
+      message: "Server Error",
+      status: false,
+    });
   }
 };

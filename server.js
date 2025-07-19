@@ -8,12 +8,15 @@ import userRoutes from "./routes/userRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./swagger/swaggerConfig.js";
+import { expireOldPurchases } from "./cron/expirePurchases.js";
+
 
 dotenv.config();
 const app = express();
 app.use(express.json());
 app.use(cors());
 connectDB();
+expireOldPurchases();
 
 // Make uploads folder publicly accessible
 const __dirname = path.resolve();
