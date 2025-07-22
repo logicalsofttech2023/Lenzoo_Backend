@@ -10,7 +10,6 @@ import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./swagger/swaggerConfig.js";
 import { expireOldPurchases } from "./cron/expirePurchases.js";
 
-
 dotenv.config();
 const app = express();
 app.use(express.json());
@@ -38,7 +37,15 @@ app.use("/api/user", userRoutes);
 app.use("/api/admin", adminRoutes);
 
 // sweger api
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use(
+  "/api-docs",
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerSpec, {
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
+  })
+);
 
 // Start Server
 const PORT = process.env.PORT || 5003;

@@ -78,13 +78,7 @@ const productSchema = new mongoose.Schema(
     },
     frameSize: {
       type: String,
-      enum: [
-        "Extra Narrow",
-        "Narrow",
-        "Medium",
-        "Wide",
-        "Extra Wide",
-      ],
+      enum: ["Extra Narrow", "Narrow", "Medium", "Wide", "Extra Wide"],
       required: true,
     },
     suitableFor: {
@@ -113,7 +107,12 @@ const productSchema = new mongoose.Schema(
     },
     faceShape: {
       type: String, // e.g. "Round", "Oval", "Square"
-    }
+    },
+    quantityAvailable: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
   },
   {
     timestamps: true,

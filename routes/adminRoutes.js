@@ -24,9 +24,13 @@ import {
   deleteMembership,
   getAllTransaction,
   getAllPrescription,
+  updateOrderStatus,
+  getAllOrders,
+  getOrderByUserIdInAdmin,
 } from "../controllers/adminController.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
 import { uploadProfile } from "../middlewares/uploadMiddleware.js";
+import { addToCart, checkout } from "../controllers/userController.js";
 
 const router = express.Router();
 
@@ -167,7 +171,7 @@ router.post("/updateAdminDetail", authMiddleware, updateAdminDetail);
  * /api/admin/policyUpdate:
  *   post:
  *     summary: Update policy content
- *     tags: [Policy]
+ *     tags: [Admin]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -197,7 +201,7 @@ router.post("/policyUpdate", authMiddleware, policyUpdate);
  * /api/admin/getPolicy:
  *   get:
  *     summary: Get policy content
- *     tags: [Policy]
+ *     tags: [Admin]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -219,7 +223,7 @@ router.get("/getPolicy", authMiddleware, getPolicy);
  * /api/admin/addUpdateMembership:
  *   post:
  *     summary: Add or update a membership plan
- *     tags: [Membership]
+ *     tags: [Admin]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -277,7 +281,7 @@ router.post("/addUpdateMembership", authMiddleware, addUpdateMembership);
  * /api/admin/getAllMembership:
  *   get:
  *     summary: Get all membership plans
- *     tags: [Membership]
+ *     tags: [Admin]
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -291,7 +295,7 @@ router.get("/getAllMembership", authMiddleware, getAllMembership);
  * /api/admin/getMembershipById:
  *   get:
  *     summary: Get membership plan by ID
- *     tags: [Membership]
+ *     tags: [Admin]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -316,7 +320,7 @@ router.get("/getMembershipById", authMiddleware, getMembershipById);
  * /api/admin/deleteMembership:
  *   delete:
  *     summary: Delete a membership plan
- *     tags: [Membership]
+ *     tags: [Admin]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -333,7 +337,6 @@ router.get("/getMembershipById", authMiddleware, getMembershipById);
  *         description: Missing or invalid membership ID
  */
 router.delete("/deleteMembership", authMiddleware, deleteMembership);
-
 
 /**
  * @swagger
@@ -870,6 +873,163 @@ router.get("/getAllTransaction", authMiddleware, getAllTransaction);
  *                     $ref: '#/components/schemas/Prescription'
  */
 router.get("/getAllPrescription", authMiddleware, getAllPrescription);
+
+/**
+ * @swagger
+ * /api/user/updateOrderStatus:
+ *   get:
+ *     summary: Update the status of an order
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: orderId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: ID of the order to update
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [placed, processing, shipped, delivered, cancelled]
+ *         required: true
+ *         description: New status for the order
+ *     responses:
+ *       200:
+ *         description: Order status updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 order:
+ *                   $ref: '#/components/schemas/Order'
+ *       400:
+ *         description: Missing or invalid parameters
+ *       404:
+ *         description: Order not found
+ *       500:
+ *         description: Server error
+ */
+router.get("/updateOrderStatus", authMiddleware, updateOrderStatus);
+
+
+/**
+ * @swagger
+ * /api/admin/getAllOrders:
+ *   get:
+ *     summary: Get all orders with optional search and pagination
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: Search by user's first or last name
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *         required: false
+ *         default: 1
+ *         description: Current page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *         required: false
+ *         default: 10
+ *         description: Number of orders per page
+ *     responses:
+ *       200:
+ *         description: Orders fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Order'
+ *                 currentPage:
+ *                   type: integer
+ *                 totalPages:
+ *                   type: integer
+ *                 totalItems:
+ *                   type: integer
+ *       500:
+ *         description: Server error
+ */
+
+router.get("/getAllOrders", authMiddleware, getAllOrders);
+
+/**
+ * @swagger
+ * /api/admin/getOrderByUserIdInAdmin:
+ *   get:
+ *     summary: Get all orders by userId (Admin)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: userId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: MongoDB ObjectId of the user
+ *     responses:
+ *       200:
+ *         description: Orders fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Fetched orders successfully
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     description: Order details
+ *       500:
+ *         description: Error fetching orders
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: Error fetching orders
+ *                 error:
+ *                   type: string
+ *                   example: Internal server error
+ */
+
+router.get("/getOrderByUserIdInAdmin", authMiddleware, getOrderByUserIdInAdmin);
 
 
 export default router;

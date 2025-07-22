@@ -12,6 +12,8 @@ import Product from "../models/Product.js";
 import Favorite from "../models/Favorite.js";
 import { calculateEndDate } from "../utils/dateUtils.js";
 import Prescription from "../models/PrescriptionModel.js";
+import Cart from "../models/Cart.js";
+import Order from "../models/Order.js";
 
 const generateJwtToken = (user) => {
   return jwt.sign(
@@ -556,5 +558,301 @@ export const addPrescription = async (req, res) => {
   } catch (error) {
     console.error("Error uploading prescription:", error);
     res.status(500).json({ status: false, message: "Internal Server Error" });
+  }
+};
+
+export const addToCart = async (req, res) => {
+  try {
+    const { userId, productId, quantity = 1 } = req.body;
+
+    if (!userId || !productId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId and productId are required",
+      });
+    }
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    if (quantity > product.quantityAvailable) {
+      return res.status(400).json({
+        success: false,
+        message: `Only ${product.quantityAvailable} items in stock`,
+      });
+    }
+
+    let cart = await Cart.findOne({ userId });
+
+    if (!cart) {
+      cart = new Cart({
+        userId,
+        items: [{ productId, quantity }],
+      });
+    } else {
+      const itemIndex = cart.items.findIndex(
+        (item) => item.productId.toString() === productId
+      );
+
+      if (itemIndex > -1) {
+        const existingQty = cart.items[itemIndex].quantity;
+        const newQty = existingQty + quantity;
+
+        if (newQty > product.quantityAvailable) {
+          return res.status(400).json({
+            success: false,
+            message: `Cannot add ${quantity}. Only ${
+              product.quantityAvailable - existingQty
+            } more allowed`,
+          });
+        }
+
+        cart.items[itemIndex].quantity = newQty;
+      } else {
+        cart.items.push({ productId, quantity });
+      }
+    }
+
+    await cart.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Product added to cart",
+      cart,
+    });
+  } catch (error) {
+    console.error("Add to Cart Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error,
+    });
+  }
+};
+
+export const getCart = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    if (!userId) {
+      return res
+        .status(400)
+        .json({ success: false, message: "userId is required" });
+    }
+
+    const cart = await Cart.findOne({ userId }).populate("items.productId");
+
+    if (!cart) {
+      return res.status(200).json({ success: true, cart: { items: [] } });
+    }
+
+    return res.status(200).json({
+      success: true,
+      cart,
+    });
+  } catch (error) {
+    console.error("Get Cart Error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Server Error", error });
+  }
+};
+
+export const updateCartQuantity = async (req, res) => {
+  try {
+    const { userId, productId, action } = req.body;
+
+    if (!userId || !productId || !["increment", "decrement"].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "userId, productId, and valid action (increment/decrement) are required",
+      });
+    }
+
+    const cart = await Cart.findOne({ userId });
+
+    if (!cart) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Cart not found" });
+    }
+
+    const itemIndex = cart.items.findIndex(
+      (item) => item.productId.toString() === productId
+    );
+    if (itemIndex === -1) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not in cart" });
+    }
+
+    if (action === "increment") {
+      const product = await Product.findById(productId);
+      if (!product) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Product not found" });
+      }
+
+      if (cart.items[itemIndex].quantity + 1 > product.quantityAvailable) {
+        return res.status(400).json({
+          success: false,
+          message: `Only ${product.quantityAvailable} items in stock`,
+        });
+      }
+      cart.items[itemIndex].quantity += 1;
+    } else if (action === "decrement") {
+      if (cart.items[itemIndex].quantity > 1) {
+        cart.items[itemIndex].quantity -= 1;
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: "Minimum quantity is 1",
+        });
+      }
+    }
+
+    await cart.save();
+
+    return res
+      .status(200)
+      .json({ success: true, message: "Cart updated", cart });
+  } catch (error) {
+    console.error("Update Cart Quantity Error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Server Error", error });
+  }
+};
+
+export const checkout = async (req, res) => {
+  try {
+    const { userId, shippingAddress } = req.body;
+
+    if (!userId || !shippingAddress) {
+      return res.status(400).json({
+        success: false,
+        message: "userId and shipping address are required",
+      });
+    }
+
+    // Get user's cart
+    const cart = await Cart.findOne({ userId }).populate("items.productId");
+    if (!cart || cart.items.length === 0) {
+      return res.status(400).json({ success: false, message: "Cart is empty" });
+    }
+
+    // Prepare order items and calculate total
+    let totalAmount = 0;
+    const orderItems = cart.items.map((item) => {
+      const price = item.productId.sellingPrice || 0;
+      const quantity = item.quantity;
+      totalAmount += price * quantity;
+
+      return {
+        productId: item.productId._id,
+        quantity,
+        price,
+      };
+    });
+
+    // Create order
+    const newOrder = new Order({
+      userId,
+      items: orderItems,
+      totalAmount,
+      shippingAddress,
+      paymentStatus: "pending", // you can update it after payment
+    });
+
+    await newOrder.save();
+
+    // Clear user's cart
+    await Cart.findOneAndDelete({ userId });
+
+    return res.status(201).json({
+      success: true,
+      message: "Order placed successfully",
+      order: newOrder,
+    });
+  } catch (error) {
+    console.error("Checkout Error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Server Error", error });
+  }
+};
+
+export const getOrders = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    if (!userId) {
+      return res
+        .status(400)
+        .json({ success: false, message: "userId is required" });
+    }
+
+    const orders = await Order.find({ userId })
+      .populate("items.productId")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({ success: true, orders });
+  } catch (error) {
+    console.error("Get Orders Error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Server Error", error });
+  }
+};
+
+export const cancelOrder = async (req, res) => {
+  try {
+    const { orderId, userId } = req.body;
+
+    if (!orderId || !userId) {
+      return res.status(400).json({
+        success: false,
+        message: "orderId and userId are required",
+      });
+    }
+
+    const order = await Order.findOne({ _id: orderId, userId });
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    if (["shipped", "delivered", "cancelled"].includes(order.orderStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: `Order cannot be cancelled at this stage (${order.orderStatus})`,
+      });
+    }
+
+    order.orderStatus = "cancelled";
+    await order.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Order cancelled successfully",
+      order,
+    });
+  } catch (error) {
+    console.error("Cancel Order Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error,
+    });
   }
 };

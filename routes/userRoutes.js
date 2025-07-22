@@ -14,6 +14,12 @@ import {
   toggleFavoriteProduct,
   getUserFavorites,
   addPrescription,
+  checkout,
+  addToCart,
+  getCart,
+  updateCartQuantity,
+  cancelOrder,
+  getOrders,
 } from "../controllers/userController.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
 import { uploadProfile } from "../middlewares/uploadMiddleware.js";
@@ -458,4 +464,243 @@ router.post(
   prescription.single("prescriptionFile"),
   addPrescription
 );
+
+/**
+ *
+ * @swagger
+ * /api/user/addToCart:
+ *   post:
+ *     summary: Add a product to the user's cart
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - userId
+ *               - productId
+ *             properties:
+ *               userId:
+ *                 type: string
+ *                 description: ID of the user
+ *               productId:
+ *                 type: string
+ *                 description: ID of the product
+ *               quantity:
+ *                 type: integer
+ *                 default: 1
+ *                 description: Quantity of the product
+ *     responses:
+ *       200:
+ *         description: Product added to cart
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 cart:
+ *                   $ref: '#/components/schemas/Cart'
+ *       400:
+ *         description: Missing userId or productId
+ *       404:
+ *         description: Product not found
+ *       500:
+ *         description: Server error
+ */
+router.post("/addToCart", authMiddleware, addToCart);
+
+/**
+ * @swagger
+ * /api/user/checkout:
+ *   post:
+ *     summary: Checkout and create an order from the cart
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - userId
+ *               - shippingAddress
+ *             properties:
+ *               userId:
+ *                 type: string
+ *                 description: ID of the user
+ *               shippingAddress:
+ *                 type: object
+ *                 properties:
+ *                   name:
+ *                     type: string
+ *                   phone:
+ *                     type: string
+ *                   addressLine:
+ *                     type: string
+ *                   city:
+ *                     type: string
+ *                   state:
+ *                     type: string
+ *                   postalCode:
+ *                     type: string
+ *                   country:
+ *                     type: string
+ *     responses:
+ *       201:
+ *         description: Order placed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 order:
+ *                   $ref: '#/components/schemas/Order'
+ *       400:
+ *         description: Missing userId, address or empty cart
+ *       500:
+ *         description: Server error
+ */
+
+router.post("/checkout", authMiddleware, checkout);
+
+/**
+ * @swagger
+ * /api/user/getCart:
+ *   get:
+ *     summary: Get the user's cart details
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Cart fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 cart:
+ *                   $ref: '#/components/schemas/Cart'
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+router.get("/getCart", authMiddleware, getCart);
+
+/**
+ * @swagger
+ * /api/user/updateCartQuantity:
+ *   post:
+ *     summary: Update product quantity in user's cart
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - userId
+ *               - productId
+ *               - action
+ *             properties:
+ *               userId:
+ *                 type: string
+ *               productId:
+ *                 type: string
+ *               action:
+ *                 type: string
+ *                 enum: [increment, decrement]
+ *                 description: Action to perform on quantity increment, decrement
+ *                 default: increment
+ *     responses:
+ *       200:
+ *         description: Cart quantity updated
+ *       400:
+ *         description: Invalid input
+ *       500:
+ *         description: Server error
+ */
+router.post("/updateCartQuantity", authMiddleware, updateCartQuantity);
+
+/**
+ * @swagger
+ * /api/user/cancelOrder:
+ *   post:
+ *     summary: Cancel an order by orderId and userId
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - orderId
+ *               - userId
+ *             properties:
+ *               orderId:
+ *                 type: string
+ *               userId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Order cancelled successfully
+ *       404:
+ *         description: Order not found
+ *       500:
+ *         description: Server error
+ */
+router.post("/cancelOrder", authMiddleware, cancelOrder);
+
+/**
+ * @swagger
+ * /api/user/getOrders:
+ *   get:
+ *     summary: Get all orders for the logged-in user
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Orders fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 orders:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Order'
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+router.get("/getOrders", authMiddleware, getOrders);
+
 export default router;

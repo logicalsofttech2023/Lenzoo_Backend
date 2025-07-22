@@ -8,6 +8,7 @@ import User from "../models/UserModel.js";
 import Purchase from "../models/Purchase.js";
 import Transaction from "../models/TransactionModel.js";
 import PrescriptionModel from "../models/PrescriptionModel.js";
+import Order from "../models/Order.js";
 
 const generateJwtToken = (user) => {
   return jwt.sign(
@@ -542,6 +543,7 @@ export const addProduct = async (req, res) => {
       material,
       pupillaryDistance,
       faceShape,
+      quantityAvailable,
     } = req.body;
 
     let images = [];
@@ -559,7 +561,8 @@ export const addProduct = async (req, res) => {
       !frameType ||
       !frameShape ||
       !frameSize ||
-      !suitableFor?.length
+      !suitableFor?.length ||
+      !quantityAvailable
     ) {
       return res.status(400).json({
         success: false,
@@ -586,6 +589,7 @@ export const addProduct = async (req, res) => {
       material,
       pupillaryDistance,
       faceShape,
+      quantityAvailable,
     });
 
     await newProduct.save();
@@ -727,6 +731,7 @@ export const updateProduct = async (req, res) => {
       material,
       pupillaryDistance,
       faceShape,
+      quantityAvailable,
     } = req.body;
 
     // Validate required fields
@@ -739,6 +744,7 @@ export const updateProduct = async (req, res) => {
       !frameType ||
       !frameShape ||
       !frameSize ||
+      !quantityAvailable ||
       !suitableFor?.length
     ) {
       return res.status(400).json({
@@ -771,6 +777,7 @@ export const updateProduct = async (req, res) => {
     product.material = material;
     product.pupillaryDistance = pupillaryDistance;
     product.faceShape = faceShape;
+    product.quantityAvailable = quantityAvailable;
 
     // Append new images if any
     if (uploadedImages.length > 0) {
@@ -895,7 +902,9 @@ export const getAllPrescription = async (req, res) => {
       userFilter.userId = { $in: userIds };
     }
 
-    const totalPrescriptions = await PrescriptionModel.countDocuments(userFilter);
+    const totalPrescriptions = await PrescriptionModel.countDocuments(
+      userFilter
+    );
 
     const prescriptions = await PrescriptionModel.find(userFilter)
       .populate("userId")
@@ -919,3 +928,158 @@ export const getAllPrescription = async (req, res) => {
     });
   }
 };
+
+export const updateOrderStatus = async (req, res) => {
+  try {
+    const { orderId, status } = req.body;
+
+    const allowedStatuses = [
+      "placed",
+      "processing",
+      "shipped",
+      "delivered",
+      "cancelled",
+    ];
+
+    if (!orderId || !status) {
+      return res.status(400).json({
+        success: false,
+        message: "orderId and status are required",
+      });
+    }
+
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status value",
+      });
+    }
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Order not found" });
+    }
+
+    order.orderStatus = status;
+    await order.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Order status updated successfully",
+      order,
+    });
+  } catch (error) {
+    console.error("Update Order Status Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error,
+    });
+  }
+};
+
+export const getAllOrders = async (req, res) => {
+  try {
+    const { search = "", page = 1, limit = 10 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const query = {};
+
+    // Get matching user IDs if search keyword is provided
+    if (search) {
+      const userQuery = {
+        $or: [
+          { firstName: { $regex: search, $options: "i" } },
+          { lastName: { $regex: search, $options: "i" } },
+        ],
+      };
+
+      const matchingUsers = await User.find(userQuery).select("_id");
+      const matchingUserIds = matchingUsers.map((user) => user._id);
+
+      query.$or = [
+        { orderId: { $regex: search, $options: "i" } },
+        { userId: { $in: matchingUserIds } },
+      ];
+    }
+
+    const [orders, total] = await Promise.all([
+      Order.find(query)
+        .populate("userId", "firstName lastName email")
+        .populate("items.productId")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
+      Order.countDocuments(query),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message: "Fetched orders successfully",
+      data: orders,
+      currentPage: parseInt(page),
+      totalPages: Math.ceil(total / limit),
+      totalItems: total,
+    });
+  } catch (error) {
+    console.error("Error in getAllOrders:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching orders",
+      error: error.message,
+    });
+  }
+};
+
+export const getOrderByUserIdInAdmin = async (req, res) => {
+  try {
+    const { userId } = req.query;
+    const orders = await Order.find({ userId }).populate("items.productId");
+
+    return res.status(200).json({
+      success: true,
+      message: "Fetched orders successfully",
+      data: orders,
+    });
+  } catch (error) {
+    console.error("Error in getOrderByUserIdInAdmin:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching orders",
+      error: error.message,
+    });
+  }
+};
+
+export const getUserDetailsById = async (req, res) => {
+  try {
+    const { id } = req.query;
+
+    const user = await User.findById(id).lean();
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const orders = await Order.find({ userId: id }).populate("items.productId");
+
+    // Attach orders to the user object
+    user.orders = orders;
+
+    return res.status(200).json({
+      success: true,
+      message: "User details fetched successfully",
+      user,
+    });
+  } catch (error) {
+    console.error("Error in getUserDetailsById:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching user details",
+      error: error.message,
+    });
+  }
+};
+
