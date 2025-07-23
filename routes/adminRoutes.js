@@ -27,6 +27,7 @@ import {
   updateOrderStatus,
   getAllOrders,
   getOrderByUserIdInAdmin,
+  getUserDetailsById,
 } from "../controllers/adminController.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
 import { uploadProfile } from "../middlewares/uploadMiddleware.js";
@@ -876,10 +877,10 @@ router.get("/getAllPrescription", authMiddleware, getAllPrescription);
 
 /**
  * @swagger
- * /api/user/updateOrderStatus:
+ * /api/admin/updateOrderStatus:
  *   get:
  *     summary: Update the status of an order
- *     tags: [User]
+ *     tags: [Admin]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -917,8 +918,7 @@ router.get("/getAllPrescription", authMiddleware, getAllPrescription);
  *       500:
  *         description: Server error
  */
-router.get("/updateOrderStatus", authMiddleware, updateOrderStatus);
-
+router.post("/updateOrderStatus", authMiddleware, updateOrderStatus);
 
 /**
  * @swagger
@@ -974,7 +974,6 @@ router.get("/updateOrderStatus", authMiddleware, updateOrderStatus);
  *       500:
  *         description: Server error
  */
-
 router.get("/getAllOrders", authMiddleware, getAllOrders);
 
 /**
@@ -1028,8 +1027,121 @@ router.get("/getAllOrders", authMiddleware, getAllOrders);
  *                   type: string
  *                   example: Internal server error
  */
-
 router.get("/getOrderByUserIdInAdmin", authMiddleware, getOrderByUserIdInAdmin);
 
+/**
+ * @swagger
+ * /api/admin/getUserDetailsById:
+ *   get:
+ *     summary: Get user details along with order history (Admin)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: id
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: MongoDB ObjectId of the user
+ *     responses:
+ *       200:
+ *         description: User details fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: User details fetched successfully
+ *                 user:
+ *                   type: object
+ *                   description: User data with order history
+ *                   properties:
+ *                     _id:
+ *                       type: string
+ *                       example: 64a3c1b9fbd6ae0013b79abc
+ *                     firstName:
+ *                       type: string
+ *                       example: John
+ *                     lastName:
+ *                       type: string
+ *                       example: Doe
+ *                     email:
+ *                       type: string
+ *                       example: john@example.com
+ *                     phone:
+ *                       type: string
+ *                       example: 9876543210
+ *                     wallet:
+ *                       type: number
+ *                       example: 150.5
+ *                     orders:
+ *                       type: array
+ *                       description: List of orders placed by the user
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           _id:
+ *                             type: string
+ *                             example: 64a5d1e2bf6c2b00123abcde
+ *                           totalAmount:
+ *                             type: number
+ *                             example: 999.99
+ *                           paymentStatus:
+ *                             type: string
+ *                             example: success
+ *                           shippingAddress:
+ *                             type: string
+ *                             example: 123 Street, City, India
+ *                           items:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                               properties:
+ *                                 productId:
+ *                                   type: object
+ *                                   description: Product info
+ *                                 quantity:
+ *                                   type: number
+ *                                   example: 2
+ *                                 price:
+ *                                   type: number
+ *                                   example: 499.99
+ *       404:
+ *         description: User not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: User not found
+ *       500:
+ *         description: Error fetching user details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: Error fetching user details
+ *                 error:
+ *                   type: string
+ *                   example: Internal server error
+ */
+router.get("/getUserDetailsById", authMiddleware, getUserDetailsById);
 
 export default router;

@@ -13,7 +13,7 @@ const profileStorage = multer.diskStorage({
 
 // File filter for all image formats
 const fileFilter = (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|webp|bmp|tiff/;
+    const allowedTypes = /jpeg|jpg|png|gif|webp|bmp|jfif|tiff/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
 

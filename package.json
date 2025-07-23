@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js",
+    "start": "concurrently \"npm run server\" \"npm run flask\"",
+    "server": "node server.js",
+    "flask": "python process_server.py",
     "dev": "nodemon server.js"
   },
   "repository": {

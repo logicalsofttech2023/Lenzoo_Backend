@@ -20,6 +20,7 @@ import {
   updateCartQuantity,
   cancelOrder,
   getOrders,
+  chatBot,
 } from "../controllers/userController.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
 import { uploadProfile } from "../middlewares/uploadMiddleware.js";
@@ -532,12 +533,8 @@ router.post("/addToCart", authMiddleware, addToCart);
  *           schema:
  *             type: object
  *             required:
- *               - userId
  *               - shippingAddress
  *             properties:
- *               userId:
- *                 type: string
- *                 description: ID of the user
  *               shippingAddress:
  *                 type: object
  *                 properties:
@@ -702,5 +699,45 @@ router.post("/cancelOrder", authMiddleware, cancelOrder);
  *         description: Server error
  */
 router.get("/getOrders", authMiddleware, getOrders);
+
+/**
+ * @swagger
+ * /api/user/chatBot:
+ *   post:
+ *     summary: Send a message to chatbot and get automated response
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - message
+ *             properties:
+ *               message:
+ *                 type: string
+ *                 example: "how to schedule exam"
+ *     responses:
+ *       200:
+ *         description: Chatbot response returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 reply:
+ *                   type: string
+ *                   example: "Go to the Schedule tab and choose your nearest center."
+ *       400:
+ *         description: Message is required
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+router.post("/chatBot",authMiddleware, chatBot);
 
 export default router;

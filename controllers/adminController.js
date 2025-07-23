@@ -9,6 +9,7 @@ import Purchase from "../models/Purchase.js";
 import Transaction from "../models/TransactionModel.js";
 import PrescriptionModel from "../models/PrescriptionModel.js";
 import Order from "../models/Order.js";
+import Favorite from "../models/Favorite.js";
 
 const generateJwtToken = (user) => {
   return jwt.sign(
@@ -548,7 +549,7 @@ export const addProduct = async (req, res) => {
 
     let images = [];
     if (req.files && req.files.length > 0) {
-      images = req.files.map((file) => file.filename); // or file.path if you store full path
+      images = req.files.map((file) => `uploads/${file.filename}`);
     }
 
     // Required field validation
@@ -699,7 +700,7 @@ export const getProductById = async (req, res) => {
   }
 };
 
-export const updateProduct = async (req, res) => {
+export const updateProduct = async (req, res) => {  
   try {
     const { id } = req.query;
 
@@ -756,7 +757,7 @@ export const updateProduct = async (req, res) => {
     // Handle uploaded images
     let uploadedImages = [];
     if (req.files && req.files.length > 0) {
-      uploadedImages = req.files.map((file) => file.filename);
+      uploadedImages = req.files.map((file) => `uploads/${file.filename}`);
     }
 
     // Update directly from req.body with validation
@@ -962,8 +963,37 @@ export const updateOrderStatus = async (req, res) => {
         .json({ success: false, message: "Order not found" });
     }
 
+    // Update status
     order.orderStatus = status;
     await order.save();
+
+    // 🔔 Notify User
+    const userId = order.userId;
+    const user = await User.findById(userId);
+
+    if (user) {
+      const statusMessages = {
+        placed: "has been placed successfully",
+        processing: "is now being processed",
+        shipped: "has been shipped",
+        delivered: "has been delivered",
+        cancelled: "has been cancelled",
+      };
+
+      const title = "Order Status Update";
+      const body = `Your order (ID: ${order._id}) ${statusMessages[status]}.`;
+
+      try {
+        await addNotification(userId, title, body);
+
+        // Optional push notification
+        if (user.firebaseToken) {
+          // await sendNotification(user.firebaseToken, title, body);
+        }
+      } catch (notificationError) {
+        console.error("Notification Error:", notificationError);
+      }
+    }
 
     return res.status(200).json({
       success: true,
@@ -979,6 +1009,7 @@ export const updateOrderStatus = async (req, res) => {
     });
   }
 };
+
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -1058,15 +1089,25 @@ export const getUserDetailsById = async (req, res) => {
     const { id } = req.query;
 
     const user = await User.findById(id).lean();
-
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
 
+    // Get user's orders
     const orders = await Order.find({ userId: id }).populate("items.productId");
 
-    // Attach orders to the user object
+    // Get user's prescriptions
+    const prescriptions = await PrescriptionModel.find({ userId: id });
+
+    // Get user's favorite products
+    const favorites = await Favorite.find({ userId: id }).populate("productId");
+
+    // Attach extra data to user object
     user.orders = orders;
+    user.prescriptions = prescriptions;
+    user.favorites = favorites;
 
     return res.status(200).json({
       success: true,
@@ -1082,4 +1123,3 @@ export const getUserDetailsById = async (req, res) => {
     });
   }
 };
-

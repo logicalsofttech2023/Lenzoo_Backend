@@ -14,6 +14,7 @@ import { calculateEndDate } from "../utils/dateUtils.js";
 import Prescription from "../models/PrescriptionModel.js";
 import Cart from "../models/Cart.js";
 import Order from "../models/Order.js";
+import { Policy, FAQ } from "../models/PolicyModel.js";
 
 const generateJwtToken = (user) => {
   return jwt.sign(
@@ -733,7 +734,8 @@ export const updateCartQuantity = async (req, res) => {
 
 export const checkout = async (req, res) => {
   try {
-    const { userId, shippingAddress } = req.body;
+    const userId = req.user.id;
+    const {shippingAddress } = req.body;
 
     if (!userId || !shippingAddress) {
       return res.status(400).json({
@@ -768,7 +770,7 @@ export const checkout = async (req, res) => {
       items: orderItems,
       totalAmount,
       shippingAddress,
-      paymentStatus: "pending", // you can update it after payment
+      paymentStatus: "pending",
     });
 
     await newOrder.save();
@@ -776,10 +778,43 @@ export const checkout = async (req, res) => {
     // Clear user's cart
     await Cart.findOneAndDelete({ userId });
 
+    // 🔐 Generate Transaction ID
+    const transactionId = generateTransactionId();
+
+    // 💳 Create a Transaction Record
+    const transaction = new Transaction({
+      userId,
+      amount: totalAmount,
+      type: "checkout",
+      status: "success",
+      transactionId,
+      description: `Order placed worth ₹${totalAmount}`,
+    });
+
+    await transaction.save();
+
+    // 🔔 Notify User
+    const user = await User.findById(userId);
+
+    const title = "Order Placed Successfully";
+    const body = `Your order of ₹${totalAmount} has been placed. Order ID: ${newOrder._id}`;
+
+    try {
+      await addNotification(userId, title, body);
+
+      // Optional push notification
+      // if (user.firebaseToken) {
+      //   await sendNotification(user.firebaseToken, title, body);
+      // }
+    } catch (notificationError) {
+      console.error("Notification Error:", notificationError);
+    }
+
     return res.status(201).json({
       success: true,
       message: "Order placed successfully",
       order: newOrder,
+      transaction,
     });
   } catch (error) {
     console.error("Checkout Error:", error);
@@ -854,5 +889,66 @@ export const cancelOrder = async (req, res) => {
       message: "Server Error",
       error,
     });
+  }
+};
+
+export const chatBot = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { message } = req.body;
+
+    if (!message || !userId)
+      return res.status(400).json({ error: "Message and userId are required" });
+
+    const lowerMsg = message.toLowerCase();
+
+    // Check for English order-related keywords
+    const orderKeywords = [
+      "order",
+      "delivery",
+      "status",
+      "track",
+      "shipped",
+      "cancel",
+      "where",
+      "when",
+    ];
+    const isOrderQuery = orderKeywords.some((word) => lowerMsg.includes(word));
+
+    if (lowerMsg.includes("order") && isOrderQuery) {
+      const latestOrder = await Order.findOne({ userId })
+        .sort({ createdAt: -1 })
+        .populate("items.productId");
+
+      if (!latestOrder) {
+        return res.json({ reply: "You don't have any recent orders." });
+      }
+
+      const status = latestOrder.paymentStatus;
+      const totalItems = latestOrder.items.length;
+      const totalAmount = latestOrder.totalAmount;
+
+      return res.json({
+        reply: `Your latest order has ${totalItems} item(s) with a total of ₹${totalAmount}. Current status: ${status}.`,
+      });
+    }
+
+    // Check against static FAQs
+    const faqs = await FAQ.find();
+    const bestMatch = faqs.find((faq) =>
+      lowerMsg.includes(faq.question.toLowerCase())
+    );
+
+    if (bestMatch) {
+      return res.json({ reply: bestMatch.answer });
+    }
+
+    return res.json({
+      reply:
+        "Sorry, I couldn't understand that. Please contact our support team for help.",
+    });
+  } catch (err) {
+    console.error("ChatBot Error:", err);
+    return res.status(500).json({ error: "Server Error" });
   }
 };
