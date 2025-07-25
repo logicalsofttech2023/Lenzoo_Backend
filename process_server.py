@@ -233,5 +233,10 @@ def process_image():
             os.remove(temp_filename)
             print(f"🧹 Temporary file deleted: {temp_filename}")
 
+@app.route('/ping', methods=['GET'])
+def ping():
+    return jsonify({"message": "✅ Flask server is running!"})
+
+
 if __name__ == '__main__':
     app.run(port=6006, debug=True)

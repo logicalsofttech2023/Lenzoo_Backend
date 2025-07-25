@@ -952,3 +952,5 @@ export const chatBot = async (req, res) => {
     return res.status(500).json({ error: "Server Error" });
   }
 };
+
+
