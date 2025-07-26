@@ -28,9 +28,9 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 //   credential: admin.credential.cert(serviceAccount),
 // });
 
-app.get("/", (req, res) => {
-  res.send("✅ API is running...");
-});
+// app.get("/", (req, res) => {
+//   res.send("✅ API is running...");
+// });
 
 // Routes
 app.use("/api/user", userRoutes);
@@ -46,6 +46,14 @@ app.use(
     },
   })
 );
+
+// Serve React frontend from root-level dist folder
+app.use(express.static(path.join(__dirname, "/dist")));
+
+app.get("*", (req, res) => {
+  res.sendFile(path.resolve(__dirname, "dist", "index.html"));
+});
+
 
 // Start Server
 const PORT = process.env.PORT || 5003;
