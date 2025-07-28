@@ -21,10 +21,21 @@ import {
   cancelOrder,
   getOrders,
   chatBot,
+  updateLocation,
+  bookAppointment,
+  cancelAppointmentByUser,
+  getAppointmentsByUser,
+  getUserNotifications,
+  rescheduleAppointment,
+  addShippingAddress,
+  getShippingAddresses,
+  updateShippingAddress,
+  deleteShippingAddress,
 } from "../controllers/userController.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
 import { uploadProfile } from "../middlewares/uploadMiddleware.js";
 import { prescription } from "../middlewares/prescription.js";
+import optionalAuth from "../middlewares/optionalMiddleware.js";
 
 const router = express.Router();
 
@@ -285,27 +296,16 @@ router.get("/getMyPlan", authMiddleware, getMyPlan);
  * /api/user/getAllProductsInUser:
  *   get:
  *     tags: [User]
- *     summary: Get all products available to the logged-in user (with search & pagination)
+ *     summary: Get all products available to the user (with favorite status, search & pagination)
  *     security:
- *       - bearerAuth: []
+ *       - bearerAuth: []  # Optional bearer token (set via optionalAuth middleware)
  *     parameters:
  *       - in: query
- *         name: search
+ *         name: suitableFor
  *         schema:
  *           type: string
- *         description: Search term to filter products by name
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 1
- *         description: Page number for pagination
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           default: 10
- *         description: Number of items per page
+ *           enum: [Men, Women, Kids]
+ *         description: Filter products based on target user category
  *     responses:
  *       200:
  *         description: Products fetched successfully
@@ -318,22 +318,23 @@ router.get("/getMyPlan", authMiddleware, getMyPlan);
  *                   type: boolean
  *                 message:
  *                   type: string
- *                 data:
+ *                 products:
  *                   type: array
  *                   items:
- *                     $ref: '#/components/schemas/Product'
- *                 currentPage:
- *                   type: integer
- *                 totalPages:
- *                   type: integer
- *                 totalItems:
- *                   type: integer
+ *                     type: object
+ *                     allOf:
+ *                       - $ref: '#/components/schemas/Product'
+ *                       - type: object
+ *                         properties:
+ *                           status:
+ *                             type: boolean
+ *                             description: true if product is marked as favorite by logged-in user
  *       401:
- *         description: Unauthorized - invalid or missing token
+ *         description: Unauthorized - invalid or missing token (ignored if using optionalAuth)
  *       500:
  *         description: Server error
  */
-router.get("/getAllProductsInUser", authMiddleware, getAllProductsInUser);
+router.get("/getAllProductsInUser", optionalAuth, getAllProductsInUser);
 
 /**
  * @swagger
@@ -465,7 +466,6 @@ router.post(
   prescription.single("prescriptionFile"),
   addPrescription
 );
-
 /**
  *
  * @swagger
@@ -533,25 +533,11 @@ router.post("/addToCart", authMiddleware, addToCart);
  *           schema:
  *             type: object
  *             required:
- *               - shippingAddress
+ *               - shippingAddressId
  *             properties:
- *               shippingAddress:
- *                 type: object
- *                 properties:
- *                   name:
- *                     type: string
- *                   phone:
- *                     type: string
- *                   addressLine:
- *                     type: string
- *                   city:
- *                     type: string
- *                   state:
- *                     type: string
- *                   postalCode:
- *                     type: string
- *                   country:
- *                     type: string
+ *               shippingAddressId:
+ *                 type: string
+ *                 description: ID of the selected shipping address
  *     responses:
  *       201:
  *         description: Order placed successfully
@@ -562,16 +548,19 @@ router.post("/addToCart", authMiddleware, addToCart);
  *               properties:
  *                 success:
  *                   type: boolean
+ *                   example: true
  *                 message:
  *                   type: string
+ *                   example: Order placed successfully
  *                 order:
  *                   $ref: '#/components/schemas/Order'
+ *                 transaction:
+ *                   $ref: '#/components/schemas/Transaction'
  *       400:
- *         description: Missing userId, address or empty cart
+ *         description: Missing userId, shipping address, or cart is empty
  *       500:
  *         description: Server error
  */
-
 router.post("/checkout", authMiddleware, checkout);
 
 /**
@@ -738,6 +727,391 @@ router.get("/getOrders", authMiddleware, getOrders);
  *       500:
  *         description: Server error
  */
-router.post("/chatBot",authMiddleware, chatBot);
+router.post("/chatBot", authMiddleware, chatBot);
+
+/**
+ * @swagger
+ * /api/user/updateLocation:
+ *   post:
+ *     summary: Update user's location information
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               latitude:
+ *                 type: number
+ *                 format: double
+ *                 example: 28.6139
+ *               longitude:
+ *                 type: number
+ *                 format: double
+ *                 example: 77.2090
+ *               address:
+ *                 type: string
+ *                 example: "New Delhi, India"
+ *     responses:
+ *       200:
+ *         description: Location updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Location updated successfully"
+ *                 status:
+ *                   type: boolean
+ *                   example: true
+ *                 user:
+ *                   $ref: '#/components/schemas/User'
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: User not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "User not found"
+ *                 status:
+ *                   type: boolean
+ *                   example: false
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Server Error"
+ *                 status:
+ *                   type: boolean
+ *                   example: false
+ */
+router.post("/updateLocation", authMiddleware, updateLocation);
+
+/**
+ * @swagger
+ * /api/user/bookAppointment:
+ *   post:
+ *     summary: Book an eye test appointment
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - date
+ *               - time
+ *             properties:
+ *               date:
+ *                 type: string
+ *                 format: date
+ *                 example: "2025-07-30"
+ *               time:
+ *                 type: string
+ *                 example: "15:30"
+ *     responses:
+ *       200:
+ *         description: Appointment booked successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Appointment booked successfully"
+ *                 appointment:
+ *                   $ref: '#/components/schemas/Appointment'
+ *       400:
+ *         description: Invalid input
+ *       500:
+ *         description: Server error
+ */
+router.post("/bookAppointment", authMiddleware, bookAppointment);
+
+/**
+ * @swagger
+ * /api/user/cancelAppointmentByUser:
+ *   post:
+ *     summary: Cancel a booked appointment by user
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - appointmentId
+ *             properties:
+ *               appointmentId:
+ *                 type: string
+ *                 example: "64e8f31248a4bc2fe0d8a345"
+ *     responses:
+ *       200:
+ *         description: Appointment cancelled successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Appointment cancelled by user"
+ *       404:
+ *         description: Appointment not found
+ *       500:
+ *         description: Server error
+ */
+router.post(
+  "/cancelAppointmentByUser",
+  authMiddleware,
+  cancelAppointmentByUser
+);
+
+/**
+ * @swagger
+ * /api/user/getAppointmentsByUser:
+ *   get:
+ *     summary: Get all appointments for the logged-in user
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of user appointments
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 appointments:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Appointment'
+ *       500:
+ *         description: Server error
+ */
+router.get("/getAppointmentsByUser", authMiddleware, getAppointmentsByUser);
+
+/**
+ * @swagger
+ * /api/user/getUserNotifications:
+ *   get:
+ *     summary: Get all notifications for the logged-in user
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of user notifications
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 notifications:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Notification'
+ *       500:
+ *         description: Server error
+ */
+router.get("/getUserNotifications", authMiddleware, getUserNotifications);
+
+/**
+ * @swagger
+ * /api/user/rescheduleAppointment:
+ *   post:
+ *     summary: Reschedule an appointment
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - appointmentId
+ *               - newDate
+ *               - newTime
+ *             properties:
+ *               appointmentId:
+ *                 type: string
+ *               newDate:
+ *                 type: string
+ *                 format: date
+ *               newTime:
+ *                 type: string
+ *                 example: "15:30"
+ *     responses:
+ *       200:
+ *         description: Appointment rescheduled successfully
+ *       404:
+ *         description: Appointment not found
+ *       500:
+ *         description: Server error
+ */
+router.post("/rescheduleAppointment", authMiddleware, rescheduleAppointment);
+
+/**
+ * @swagger
+ * /api/user/addShippingAddress:
+ *   post:
+ *     summary: Add a new shipping address
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - email
+ *               - phone
+ *               - address
+ *               - pincode
+ *               - addressType
+ *             properties:
+ *               name:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               address:
+ *                 type: string
+ *               pincode:
+ *                 type: string
+ *               addressType:
+ *                 type: string
+ *               isDefault:
+ *                 type: boolean
+ *     responses:
+ *       201:
+ *         description: Address added successfully
+ *       400:
+ *         description: Missing required fields
+ *       500:
+ *         description: Server error
+ */
+router.post("/addShippingAddress", authMiddleware, addShippingAddress);
+
+/**
+ * @swagger
+ * /api/user/getShippingAddresses:
+ *   get:
+ *     summary: Get all shipping addresses for the logged-in user
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Shipping addresses fetched successfully
+ *       500:
+ *         description: Server error
+ */
+router.get("/getShippingAddresses", authMiddleware, getShippingAddresses);
+
+/**
+ * @swagger
+ * /api/user/updateShippingAddress:
+ *   post:
+ *     summary: Update a shipping address
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - id
+ *               - name
+ *               - email
+ *               - phone
+ *               - address
+ *               - pincode
+ *               - addressType
+ *             properties:
+ *               id:
+ *                 type: string
+ *               name:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               address:
+ *                 type: string
+ *               pincode:
+ *                 type: string
+ *               addressType:
+ *                 type: string
+ *               isDefault:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Address updated successfully
+ *       400:
+ *         description: Missing required fields
+ *       500:
+ *         description: Server error
+ */
+router.post("/updateShippingAddress", authMiddleware, updateShippingAddress);
+
+/**
+ * @swagger
+ * /api/user/deleteShippingAddress:
+ *   post:
+ *     summary: Delete a shipping address
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - id
+ *             properties:
+ *               id:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Address deleted successfully
+ *       500:
+ *         description: Server error
+ */
+router.post("/deleteShippingAddress", authMiddleware, deleteShippingAddress);
 
 export default router;

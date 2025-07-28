@@ -13,8 +13,10 @@ import Favorite from "../models/Favorite.js";
 import { calculateEndDate } from "../utils/dateUtils.js";
 import Prescription from "../models/PrescriptionModel.js";
 import Cart from "../models/Cart.js";
-import Order from "../models/Order.js";
+import { Order, ShippingAddress } from "../models/Order.js";
 import { Policy, FAQ } from "../models/PolicyModel.js";
+import Appointment from "../models/Appointment.js";
+import Notification from "../models/NotificationModel.js";
 
 const generateJwtToken = (user) => {
   return jwt.sign(
@@ -214,6 +216,32 @@ export const updateProfile = async (req, res) => {
     res
       .status(200)
       .json({ message: "Profile updated successfully", status: true, user });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server Error", status: false });
+  }
+};
+
+export const updateLocation = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { latitude, longitude, address } = req.body;
+
+    let user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found", status: false });
+    }
+
+    // Update fields
+    if (latitude) user.latitude = latitude;
+    if (longitude) user.longitude = longitude;
+    if (address) user.address = address;
+
+    await user.save();
+
+    res
+      .status(200)
+      .json({ message: "Location updated successfully", status: true, user });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Server Error", status: false });
@@ -465,11 +493,31 @@ export const getMyPlan = async (req, res) => {
 
 export const getAllProductsInUser = async (req, res) => {
   try {
-    const products = await Product.find().sort({ createdAt: -1 });
+    const userId = req.user?.id;
+    const { suitableFor } = req.query;
+
+    const filter = {};
+    if (suitableFor) {
+      filter.suitableFor = suitableFor;
+    }
+
+    const products = await Product.find(filter).sort({ createdAt: -1 });
+
+    const favoriteDocs = await Favorite.find({ userId });
+    const favoriteProductIds = favoriteDocs.map((fav) =>
+      fav.productId.toString()
+    );
+
+    const productsWithStatus = products.map((product) => {
+      return {
+        ...product._doc,
+        isFavorite: favoriteProductIds.includes(product._id.toString()),
+      };
+    });
 
     return res.status(200).json({
       success: true,
-      products,
+      products: productsWithStatus,
       message: "Products fetched successfully",
     });
   } catch (error) {
@@ -732,15 +780,127 @@ export const updateCartQuantity = async (req, res) => {
   }
 };
 
+export const addShippingAddress = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { name, email, phone, address, pincode, addressType, isDefault } =
+      req.body;
+    if (!name || !email || !phone || !address || !pincode || !addressType) {
+      return res
+        .status(400)
+        .json({ success: false, message: "All fields are required" });
+    }
+    const shippingAddress = new ShippingAddress({
+      userId,
+      name,
+      email,
+      phone,
+      address,
+      pincode,
+      addressType,
+      isDefault,
+    });
+    await shippingAddress.save();
+    res
+      .status(201)
+      .json({ success: true, shippingAddress, message: "Address added" });
+  } catch (error) {
+    console.error("Add Shipping Address Error:", error);
+    res.status(500).json({ success: false, message: "Error", error });
+  }
+};
+
+export const getShippingAddresses = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const shippingAddress = await ShippingAddress.find({ userId });
+    if (!shippingAddress) {
+      res
+        .status(200)
+        .json({ success: false, message: "No shipping addresses" });
+    }
+    res.status(200).json({
+      success: true,
+      message: "fetch shipping addresses",
+      shippingAddress,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error", error });
+  }
+};
+
+export const updateShippingAddress = async (req, res) => {
+  try {
+    const { name, email, phone, address, pincode, addressType, isDefault, id } =
+      req.body;
+    if (
+      !name ||
+      !email ||
+      !phone ||
+      !address ||
+      !pincode ||
+      !addressType ||
+      !id
+    ) {
+      return res
+        .status(400)
+        .json({ success: false, message: "All fields are required" });
+    }
+
+    const updated = await ShippingAddress.findByIdAndUpdate(
+      id,
+      {
+        name,
+        email,
+        phone,
+        address,
+        pincode,
+        addressType,
+        isDefault,
+      },
+      {
+        new: true,
+      }
+    );
+    res
+      .status(200)
+      .json({ success: true, updated, message: "shippingAddress updated" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error", error });
+  }
+};
+
+export const deleteShippingAddress = async (req, res) => {
+  try {
+    const { id } = req.body;
+    await ShippingAddress.findByIdAndDelete(id);
+    res.status(200).json({ success: true, message: "Deleted" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error", error });
+  }
+};
+
 export const checkout = async (req, res) => {
   try {
     const userId = req.user.id;
-    const {shippingAddress } = req.body;
+    const { shippingAddressId } = req.body;
 
-    if (!userId || !shippingAddress) {
+    if (!userId || !shippingAddressId) {
       return res.status(400).json({
         success: false,
         message: "userId and shipping address are required",
+      });
+    }
+
+    const shippingAddress = await ShippingAddress.findOne({
+      _id: shippingAddressId,
+      userId,
+    });
+
+    if (!shippingAddress) {
+      return res.status(404).json({
+        success: false,
+        message: "Shipping Address not found or unauthorized",
       });
     }
 
@@ -769,7 +929,7 @@ export const checkout = async (req, res) => {
       userId,
       items: orderItems,
       totalAmount,
-      shippingAddress,
+      shippingAddress: shippingAddressId,
       paymentStatus: "pending",
     });
 
@@ -836,6 +996,7 @@ export const getOrders = async (req, res) => {
 
     const orders = await Order.find({ userId })
       .populate("items.productId")
+      .populate("shippingAddress")
       .sort({ createdAt: -1 });
 
     return res.status(200).json({ success: true, orders });
@@ -953,4 +1114,178 @@ export const chatBot = async (req, res) => {
   }
 };
 
+export const bookAppointment = async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const { date, time } = req.body;
 
+    if (!userId || !date || !time) {
+      return res.status(400).json({ message: "date, and time are required" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const exists = await Appointment.findOne({ date, time, userId });
+    if (exists) {
+      return res
+        .status(409)
+        .json({ message: "This time slot is already booked." });
+    }
+
+    const appointment = await Appointment.create({ userId, date, time });
+
+    // ✅ Notification logic
+    const title = "Appointment Booked";
+    const body = `Your eye test appointment is booked on ${date} at ${time}.`;
+
+    try {
+      await addNotification(userId, title, body);
+
+      // 🔁 Uncomment if using Firebase
+      // if (user.firebaseToken) {
+      //   await sendNotification(user.firebaseToken, title, body);
+      // }
+    } catch (notificationErr) {
+      console.error("Notification error:", notificationErr);
+    }
+    return res.status(201).json({ message: "Appointment booked", appointment });
+  } catch (error) {
+    res.status(500).json({ message: "Booking failed", error });
+  }
+};
+
+export const cancelAppointmentByUser = async (req, res) => {
+  try {
+    const { id } = req.query;
+    const appointment = await Appointment.findByIdAndUpdate(
+      id,
+      { status: "cancelled_by_user" },
+      { new: true }
+    );
+    if (!appointment)
+      return res
+        .status(404)
+        .json({ status: false, message: "Appointment not found" });
+
+    const user = await User.findById(appointment.userId);
+
+    if (user) {
+      const title = "Appointment Cancelled";
+      const body = `Your appointment on ${appointment.date} at ${appointment.time} has been cancelled.`;
+
+      try {
+        await addNotification(user._id, title, body);
+
+        // 🔁 Uncomment if using Firebase
+        // if (user.firebaseToken) {
+        //   await sendNotification(user.firebaseToken, title, body);
+        // }
+      } catch (notificationErr) {
+        console.error("Notification error:", notificationErr);
+      }
+    }
+
+    res.status(200).json({ message: "Appointment cancelled", appointment });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to cancel", error });
+  }
+};
+
+export const rescheduleAppointment = async (req, res) => {
+  try {
+    const { appointmentId, newDate, newTime } = req.body;
+
+    if (!appointmentId || !newDate || !newTime) {
+      return res
+        .status(400)
+        .json({ message: "appointmentId, newDate, and newTime are required" });
+    }
+
+    const appointment = await Appointment.findById(appointmentId);
+    if (!appointment) {
+      return res
+        .status(404)
+        .json({ message: "Appointment not found", status: false });
+    }
+
+    appointment.date = newDate;
+    appointment.time = newTime;
+    appointment.status = "rescheduled";
+
+    await appointment.save();
+
+    const userDetail = await User.findById(appointment.userId);
+    if (userDetail) {
+      let title = "Appointment Rescheduled";
+      let body = `Your eye test appointment has been rescheduled to ${newDate} at ${newTime}.`;
+
+      try {
+        await addNotification(userDetail._id, title, body);
+
+        // Optional: Firebase push notification
+        // if (userDetail.firebaseToken) {
+        //   await sendNotification(userDetail.firebaseToken, title, body);
+        // }
+      } catch (notificationErr) {
+        console.error("Notification error:", notificationErr);
+      }
+    }
+
+    return res
+      .status(200)
+      .json({ message: "Appointment rescheduled", status: true, appointment });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Reschedule failed", status: false, error });
+  }
+};
+
+export const getAppointmentsByUser = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const appointments = await Appointment.find({ userId }).sort({ date: -1 });
+
+    if (!appointments) {
+      res.status(400).json({
+        status: false,
+        message: "Appointments not found",
+      });
+    }
+    res
+      .status(200)
+      .json({ status: true, message: "Appointments fetched", appointments });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Error fetching user's appointments", error });
+  }
+};
+
+export const getUserNotifications = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const notifications = await Notification.find({ userId }).sort({
+      createdAt: -1,
+    });
+
+    if (!notifications) {
+      res.status(400).json({
+        status: false,
+        message: "Notifications not found",
+      });
+    }
+    res
+      .status(200)
+      .json({ status: true, message: "Notifications fetched", notifications });
+  } catch (error) {
+    res.status(500).json({
+      status: false,
+      message: "Error fetching user's notifications",
+      error,
+    });
+  }
+};

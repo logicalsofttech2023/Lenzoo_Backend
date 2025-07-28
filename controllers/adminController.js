@@ -8,8 +8,11 @@ import User from "../models/UserModel.js";
 import Purchase from "../models/Purchase.js";
 import Transaction from "../models/TransactionModel.js";
 import PrescriptionModel from "../models/PrescriptionModel.js";
-import Order from "../models/Order.js";
+import {Order} from "../models/Order.js";
 import Favorite from "../models/Favorite.js";
+import Appointment from "../models/Appointment.js";
+import { addNotification } from "../utils/AddNotification.js";
+
 
 const generateJwtToken = (user) => {
   return jwt.sign(
@@ -700,7 +703,7 @@ export const getProductById = async (req, res) => {
   }
 };
 
-export const updateProduct = async (req, res) => {  
+export const updateProduct = async (req, res) => {
   try {
     const { id } = req.query;
 
@@ -1010,7 +1013,6 @@ export const updateOrderStatus = async (req, res) => {
   }
 };
 
-
 export const getAllOrders = async (req, res) => {
   try {
     const { search = "", page = 1, limit = 10 } = req.query;
@@ -1040,6 +1042,7 @@ export const getAllOrders = async (req, res) => {
       Order.find(query)
         .populate("userId", "firstName lastName email")
         .populate("items.productId")
+        .populate("shippingAddress")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit)),
@@ -1067,7 +1070,7 @@ export const getAllOrders = async (req, res) => {
 export const getOrderByUserIdInAdmin = async (req, res) => {
   try {
     const { userId } = req.query;
-    const orders = await Order.find({ userId }).populate("items.productId");
+    const orders = await Order.find({ userId }).populate("items.productId").populate("shippingAddress");
 
     return res.status(200).json({
       success: true,
@@ -1095,19 +1098,15 @@ export const getUserDetailsById = async (req, res) => {
         .json({ success: false, message: "User not found" });
     }
 
-    // Get user's orders
     const orders = await Order.find({ userId: id }).populate("items.productId");
-
-    // Get user's prescriptions
     const prescriptions = await PrescriptionModel.find({ userId: id });
-
-    // Get user's favorite products
     const favorites = await Favorite.find({ userId: id }).populate("productId");
+    const appointments = await Appointment.find({ userId: id }).populate("userId");
 
-    // Attach extra data to user object
     user.orders = orders;
     user.prescriptions = prescriptions;
     user.favorites = favorites;
+    user.appointments = appointments;
 
     return res.status(200).json({
       success: true,
@@ -1121,5 +1120,103 @@ export const getUserDetailsById = async (req, res) => {
       message: "Error fetching user details",
       error: error.message,
     });
+  }
+};
+
+export const getAllAppointments = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search = "" } = req.query;
+
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+
+    let userFilter = {};
+
+    if (search) {
+      const regex = new RegExp(search, "i");
+      const matchingUsers = await User.find({
+        $or: [{ firstName: regex }, { lastName: regex }],
+      }).select("_id");
+
+      const userIds = matchingUsers.map((user) => user._id);
+      userFilter.userId = { $in: userIds };
+    }
+
+    const totalAppointments = await Appointment.countDocuments(userFilter);
+
+    const Appointments = await Appointment.find(userFilter)
+      .populate("userId")
+      .sort({ createdAt: -1 })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum);
+
+    return res.status(200).json({
+      message: "Appointments fetched successfully",
+      status: true,
+      totalAppointments,
+      currentPage: pageNum,
+      totalPages: Math.ceil(totalAppointments / limitNum),
+      data: Appointments,
+    });
+  } catch (error) {
+    console.error("Error fetching appointments:", error);
+    return res.status(500).json({
+      message: "Server Error",
+      status: false,
+    });
+  }
+};
+
+export const updateAppointmentStatus = async (req, res) => {
+  try {
+    const { status, id } = req.body;
+
+    const allowedStatuses = [
+      "booked",
+      "cancelled_by_admin",
+      "completed",
+      "rescheduled",
+    ];
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({ message: "Invalid status value" });
+    }
+
+    const updated = await Appointment.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true }
+    );
+    
+    if (!updated)
+      return res.status(404).json({ status: false, message: "Appointment not found" });
+
+    const userDetail = await User.findById(updated.userId);
+    
+
+    if (!userDetail) {
+      return res.status(400).json({ message: "User not found", status: false });
+    }
+    // 🔔 Send Notification to user
+    const user = userDetail._id;
+    let title = "Appointment Status Updated";
+    let body = `Your eye test appointment has been ${status.replaceAll(
+      "_",
+      " "
+    )}.`;
+
+    try {
+      await addNotification(user._id, title, body);
+
+      // 🔁 Uncomment if using Firebase Cloud Messaging
+      // if (userDetail.firebaseToken) {
+      //   await sendNotification(user.firebaseToken, title, body);
+      // }
+    } catch (notificationErr) {
+      console.error("Notification error:", notificationErr);
+    }
+
+    res.status(200).json({ status: true, message: "Status updated",  appointment: updated });
+  } catch (error) {
+    res.status(500).json({ status: false, message: "Update failed", error });
   }
 };

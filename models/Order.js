@@ -28,13 +28,9 @@ const orderSchema = new mongoose.Schema(
     ],
     totalAmount: Number,
     shippingAddress: {
-      name: String,
-      phone: String,
-      addressLine: String,
-      city: String,
-      state: String,
-      postalCode: String,
-      country: String,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ShippingAddress",
+      required: true,
     },
     paymentStatus: {
       type: String,
@@ -50,4 +46,27 @@ const orderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-export default mongoose.model("Order", orderSchema);
+const shippingAddressSchema = new mongoose.Schema(
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    name: String,
+    email: String,
+    phone: String,
+    address: String,
+    pincode: String,
+    addressType: String,
+    isDefault: Boolean,
+  },
+  { timestamps: true }
+);
+
+const ShippingAddress = mongoose.model(
+  "ShippingAddress",
+  shippingAddressSchema
+);
+const Order = mongoose.model("Order", orderSchema);
+export { ShippingAddress, Order };

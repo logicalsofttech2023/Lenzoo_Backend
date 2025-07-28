@@ -28,10 +28,11 @@ import {
   getAllOrders,
   getOrderByUserIdInAdmin,
   getUserDetailsById,
+  getAllAppointments,
+  updateAppointmentStatus,
 } from "../controllers/adminController.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
 import { uploadProfile } from "../middlewares/uploadMiddleware.js";
-import { addToCart, checkout } from "../controllers/userController.js";
 
 const router = express.Router();
 
@@ -735,7 +736,7 @@ router.get("/deleteProduct", authMiddleware, deleteProduct);
  * /api/admin/getAllUsers:
  *   get:
  *     summary: Get all users
- *     tags: [User]
+ *     tags: [Admin]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1144,4 +1145,106 @@ router.get("/getOrderByUserIdInAdmin", authMiddleware, getOrderByUserIdInAdmin);
  */
 router.get("/getUserDetailsById", authMiddleware, getUserDetailsById);
 
+/**
+ * @swagger
+ * /api/admin/getAllAppointments:
+ *   get:
+ *     summary: Get all Appointments with optional search
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *         required: false
+ *         default: 1
+ *         description: Current page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *         required: false
+ *         default: 10
+ *         description: Number of records per page
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: Search by user's first or last name
+ *     responses:
+ *       200:
+ *         description: Appointment fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 status:
+ *                   type: boolean
+ *                 totalAppointments:
+ *                   type: integer
+ *                 currentPage:
+ *                   type: integer
+ *                 totalPages:
+ *                   type: integer
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Appointment'
+ */
+router.get("/getAllAppointments", authMiddleware, getAllAppointments);
+
+/**
+ * @swagger
+ * /api/admin/updateAppointmentStatus:
+ *   post:
+ *     summary: Update appointment status (Admin only)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               id:
+ *                 type: string
+ *                 example: "64f4e92c78fd3e4a24d0b9e7"
+ *               status:
+ *                 type: string
+ *                 enum: [booked, cancelled_by_user,       cancelled_by_admin, cancelled, rescheduled]
+ *                 example: booked
+ *     responses:
+ *       200:
+ *         description: Appointment status updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Status updated"
+ *                 status:
+ *                   type: boolean
+ *                   example: true
+ *       400:
+ *         description: Invalid input
+ *       404:
+ *         description: Appointment not found
+ *       500:
+ *         description: Server error
+ */
+router.post(
+  "/updateAppointmentStatus",
+  authMiddleware,
+  updateAppointmentStatus
+);
 export default router;
