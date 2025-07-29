@@ -8,11 +8,10 @@ import User from "../models/UserModel.js";
 import Purchase from "../models/Purchase.js";
 import Transaction from "../models/TransactionModel.js";
 import PrescriptionModel from "../models/PrescriptionModel.js";
-import {Order} from "../models/Order.js";
+import { Order } from "../models/Order.js";
 import Favorite from "../models/Favorite.js";
 import Appointment from "../models/Appointment.js";
 import { addNotification } from "../utils/AddNotification.js";
-
 
 const generateJwtToken = (user) => {
   return jwt.sign(
@@ -1067,10 +1066,34 @@ export const getAllOrders = async (req, res) => {
   }
 };
 
+export const getOrderById = async (req, res) => {
+  try {
+    const { orderId } = req.query;
+    const order = await Order.findById({ _id: orderId })
+      .populate("items.productId")
+      .populate("shippingAddress");
+
+    return res.status(200).json({
+      success: true,
+      message: "Fetched orders successfully",
+      data: order,
+    });
+  } catch (error) {
+    console.error("Error in getOrderByUserIdInAdmin:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching orders",
+      error: error.message,
+    });
+  }
+};
+
 export const getOrderByUserIdInAdmin = async (req, res) => {
   try {
     const { userId } = req.query;
-    const orders = await Order.find({ userId }).populate("items.productId").populate("shippingAddress");
+    const orders = await Order.find({ userId })
+      .populate("items.productId")
+      .populate("shippingAddress");
 
     return res.status(200).json({
       success: true,
@@ -1101,7 +1124,9 @@ export const getUserDetailsById = async (req, res) => {
     const orders = await Order.find({ userId: id }).populate("items.productId");
     const prescriptions = await PrescriptionModel.find({ userId: id });
     const favorites = await Favorite.find({ userId: id }).populate("productId");
-    const appointments = await Appointment.find({ userId: id }).populate("userId");
+    const appointments = await Appointment.find({ userId: id }).populate(
+      "userId"
+    );
 
     user.orders = orders;
     user.prescriptions = prescriptions;
@@ -1186,12 +1211,13 @@ export const updateAppointmentStatus = async (req, res) => {
       { status },
       { new: true }
     );
-    
+
     if (!updated)
-      return res.status(404).json({ status: false, message: "Appointment not found" });
+      return res
+        .status(404)
+        .json({ status: false, message: "Appointment not found" });
 
     const userDetail = await User.findById(updated.userId);
-    
 
     if (!userDetail) {
       return res.status(400).json({ message: "User not found", status: false });
@@ -1215,7 +1241,9 @@ export const updateAppointmentStatus = async (req, res) => {
       console.error("Notification error:", notificationErr);
     }
 
-    res.status(200).json({ status: true, message: "Status updated",  appointment: updated });
+    res
+      .status(200)
+      .json({ status: true, message: "Status updated", appointment: updated });
   } catch (error) {
     res.status(500).json({ status: false, message: "Update failed", error });
   }

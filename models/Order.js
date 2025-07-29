@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import crypto from "crypto";
+import { type } from "os";
 
 const generateNumericOrderId = () => {
   const number = crypto.randomInt(100000, 999999);
@@ -58,7 +59,11 @@ const shippingAddressSchema = new mongoose.Schema(
     phone: String,
     address: String,
     pincode: String,
-    addressType: String,
+    addressType: {
+      type: String,
+      enum: ["Home", "Work", "Other"],
+      default: "home",
+    },
     isDefault: Boolean,
   },
   { timestamps: true }

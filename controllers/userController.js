@@ -17,6 +17,10 @@ import { Order, ShippingAddress } from "../models/Order.js";
 import { Policy, FAQ } from "../models/PolicyModel.js";
 import Appointment from "../models/Appointment.js";
 import Notification from "../models/NotificationModel.js";
+import axios from "axios";
+import fs from "fs";
+import FormData from "form-data";
+import FaceMeasurement from "../models/FaceMeasurement.js";
 
 const generateJwtToken = (user) => {
   return jwt.sign(
@@ -612,7 +616,8 @@ export const addPrescription = async (req, res) => {
 
 export const addToCart = async (req, res) => {
   try {
-    const { userId, productId, quantity = 1 } = req.body;
+    const userId = req.user.id;
+    const { productId, quantity = 1 } = req.body;
 
     if (!userId || !productId) {
       return res.status(400).json({
@@ -1287,5 +1292,59 @@ export const getUserNotifications = async (req, res) => {
       message: "Error fetching user's notifications",
       error,
     });
+  }
+};
+
+export const measure = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const tempPath = req.file ? req.file.path : "";
+    const formData = new FormData();
+    formData.append("image", fs.createReadStream(tempPath));
+    try {
+      const response = await axios.post(
+        `${process.env.MEASURE_URL}process`,
+        formData,
+        {
+          headers: formData.getHeaders(),
+          timeout: 10000,
+        }
+      );
+      const data = response.data;
+
+      const image = req.file ? req.file.path.split(path.sep).join("/") : "";
+      // Save in MongoDB
+      const newMeasurement = new FaceMeasurement({
+        userId,
+        imageUrl: image,
+        faceShape: data["Face Shape"],
+        measurementAccuracy: data["Measurement Accuracy"],
+        message: data["Message"],
+        cheekboneWidth: data["Detailed Measurements"]["Cheekbone Width (mm)"],
+        faceLength: data["Detailed Measurements"]["Face Length (mm)"],
+        foreheadWidth: data["Detailed Measurements"]["Forehead Width (mm)"],
+        jawWidth: data["Detailed Measurements"]["Jaw Width (mm)"],
+        nasoPupillaryDistance: {
+          leftEye: data["Naso-Pupillary Distance (NPD)"]["Left Eye"],
+          rightEye: data["Naso-Pupillary Distance (NPD)"]["Right Eye"],
+        },
+        pupilHeight: data["Pupil Height (PH)"],
+        pupillaryDistance: data["Pupillary Distance (PD)"],
+      });
+
+      await newMeasurement.save();
+
+      res.status(200).json({
+        success: true,
+        message: "Measurement saved successfully",
+        data: newMeasurement,
+      });
+    } catch (error) {
+      console.error("Error communicating with Python server:", error.message);
+      res.status(500).json({ error: "Failed to process image" });
+    }
+  } catch (error) {
+    console.log("Server error", error);
+    res.status(500).json({ message: "Server error", error });
   }
 };

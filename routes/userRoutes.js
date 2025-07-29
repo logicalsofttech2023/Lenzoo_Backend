@@ -31,6 +31,7 @@ import {
   getShippingAddresses,
   updateShippingAddress,
   deleteShippingAddress,
+  measure,
 } from "../controllers/userController.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
 import { uploadProfile } from "../middlewares/uploadMiddleware.js";
@@ -482,12 +483,8 @@ router.post(
  *           schema:
  *             type: object
  *             required:
- *               - userId
  *               - productId
  *             properties:
- *               userId:
- *                 type: string
- *                 description: ID of the user
  *               productId:
  *                 type: string
  *                 description: ID of the product
@@ -510,7 +507,7 @@ router.post(
  *                 cart:
  *                   $ref: '#/components/schemas/Cart'
  *       400:
- *         description: Missing userId or productId
+ *         description: Missing  productId
  *       404:
  *         description: Product not found
  *       500:
@@ -1114,4 +1111,82 @@ router.post("/updateShippingAddress", authMiddleware, updateShippingAddress);
  */
 router.post("/deleteShippingAddress", authMiddleware, deleteShippingAddress);
 
+/**
+ * @swagger
+ * /api/user/measure:
+ *   post:
+ *     summary: Upload face image and measure face attributes
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - image
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *                 description: Image file of the user's face
+ *     responses:
+ *       200:
+ *         description: Measurement saved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Measurement saved successfully
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     userId:
+ *                       type: string
+ *                     imageUrl:
+ *                       type: string
+ *                     faceShape:
+ *                       type: string
+ *                     measurementAccuracy:
+ *                       type: string
+ *                     cheekboneWidth:
+ *                       type: number
+ *                     faceLength:
+ *                       type: number
+ *                     foreheadWidth:
+ *                       type: number
+ *                     jawWidth:
+ *                       type: number
+ *                     nasoPupillaryDistance:
+ *                       type: object
+ *                       properties:
+ *                         leftEye:
+ *                           type: string
+ *                         rightEye:
+ *                           type: string
+ *                     pupilHeight:
+ *                       type: string
+ *                     pupillaryDistance:
+ *                       type: string
+ *       400:
+ *         description: Invalid response from Python server
+ *       401:
+ *         description: Unauthorized - missing or invalid token
+ *       500:
+ *         description: Server error or image processing failure
+ */
+router.post(
+  "/measure",
+  authMiddleware,
+  uploadProfile.single("image"),
+  measure
+);
 export default router;

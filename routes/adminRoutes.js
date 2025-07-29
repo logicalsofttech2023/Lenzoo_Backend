@@ -30,6 +30,7 @@ import {
   getUserDetailsById,
   getAllAppointments,
   updateAppointmentStatus,
+  getOrderById,
 } from "../controllers/adminController.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
 import { uploadProfile } from "../middlewares/uploadMiddleware.js";
@@ -1247,4 +1248,45 @@ router.post(
   authMiddleware,
   updateAppointmentStatus
 );
+
+/**
+ * @swagger
+ * /api/admin/getOrderById:
+ *   get:
+ *     summary: Get a single order by ID
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: orderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID of the order to fetch
+ *     responses:
+ *       200:
+ *         description: Fetched order successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Fetched orders successfully
+ *                 data:
+ *                   type: object
+ *                   description: Order object
+ *       400:
+ *         description: Bad request or missing orderId
+ *       401:
+ *         description: Unauthorized (if token is invalid or missing)
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/getOrderById", authMiddleware, getOrderById);
 export default router;
