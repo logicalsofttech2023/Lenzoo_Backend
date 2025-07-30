@@ -1,7 +1,30 @@
 import mongoose from "mongoose";
 
+const centerSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  location: { type: String, required: true },
+  city: String,
+  state: String,
+  pinCode: String,
+  contactNumber: String,
+  timeSlots: [
+    {
+      time: String,
+      isBooked: { type: Boolean, default: false },
+    },
+  ],
+  isActive: { type: Boolean, default: true },
+  createdAt: { type: Date, default: Date.now },
+});
+
 const appointmentSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  centerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Center",
+    required: true,
+  },
+
   date: { type: String, required: true },
   time: { type: String, required: true },
   status: {
@@ -18,4 +41,7 @@ const appointmentSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-export default mongoose.model("Appointment", appointmentSchema);
+const Appointment = mongoose.model("Appointment", appointmentSchema);
+const Center = mongoose.model("Center", centerSchema);
+
+export { Appointment, Center };

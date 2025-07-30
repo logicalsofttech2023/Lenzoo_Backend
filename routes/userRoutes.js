@@ -32,11 +32,23 @@ import {
   updateShippingAddress,
   deleteShippingAddress,
   measure,
+  saveMeasurement,
+  getAvailableCenter,
 } from "../controllers/userController.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
 import { uploadProfile } from "../middlewares/uploadMiddleware.js";
 import { prescription } from "../middlewares/prescription.js";
 import optionalAuth from "../middlewares/optionalMiddleware.js";
+import {
+  getColorResults,
+  getQuestion,
+  getResult,
+  getSingleColorQuestion,
+  startColorTest,
+  startTest,
+  submitAnswer,
+  submitColorAnswer,
+} from "../controllers/visualAcuityController.js";
 
 const router = express.Router();
 
@@ -814,18 +826,29 @@ router.post("/updateLocation", authMiddleware, updateLocation);
  *           schema:
  *             type: object
  *             required:
+ *               - centerId
  *               - date
  *               - time
  *             properties:
+ *               centerId:
+ *                 type: string
+ *                 description: ID of the center/unit where the appointment is to be booked
+ *                 example: "64cfd33408a9b2d8a5edc123"
  *               date:
  *                 type: string
  *                 format: date
+ *                 description: Appointment date
  *                 example: "2025-07-30"
  *               time:
  *                 type: string
+ *                 description: Appointment time in 24-hour format
  *                 example: "15:30"
+ *               notes:
+ *                 type: string
+ *                 description: Optional notes or special requests
+ *                 example: "Please ensure vision screening only"
  *     responses:
- *       200:
+ *       201:
  *         description: Appointment booked successfully
  *         content:
  *           application/json:
@@ -834,11 +857,29 @@ router.post("/updateLocation", authMiddleware, updateLocation);
  *               properties:
  *                 message:
  *                   type: string
- *                   example: "Appointment booked successfully"
+ *                   example: "Appointment booked"
  *                 appointment:
  *                   $ref: '#/components/schemas/Appointment'
  *       400:
  *         description: Invalid input
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "centerId, date, and time are required"
+ *       409:
+ *         description: Time slot already booked
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "You have already booked this time slot at this center."
  *       500:
  *         description: Server error
  */
@@ -885,6 +926,36 @@ router.post(
   authMiddleware,
   cancelAppointmentByUser
 );
+
+
+/**
+ * @swagger
+ * /api/user/getAvailableCenter:
+ *   get:
+ *     summary: Get all available centers for the logged-in user
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: available centers fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 orders:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Center'
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+router.get("/getAvailableCenter", getAvailableCenter);
 
 /**
  * @swagger
@@ -1183,10 +1254,213 @@ router.post("/deleteShippingAddress", authMiddleware, deleteShippingAddress);
  *       500:
  *         description: Server error or image processing failure
  */
-router.post(
-  "/measure",
-  authMiddleware,
-  uploadProfile.single("image"),
-  measure
-);
+router.post("/measure", authMiddleware, uploadProfile.single("image"), measure);
+
+/**
+ * @swagger
+ * /api/user/saveMeasurement:
+ *   post:
+ *     summary: Save face measurement result to database
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - imageUrl
+ *               - faceShape
+ *               - measurementAccuracy
+ *               - message
+ *               - cheekboneWidth
+ *               - faceLength
+ *               - foreheadWidth
+ *               - jawWidth
+ *               - pupilHeight
+ *               - pupillaryDistance
+ *               - nasoPupillaryDistance
+ *             properties:
+ *               imageUrl:
+ *                 type: string
+ *               faceShape:
+ *                 type: string
+ *               measurementAccuracy:
+ *                 type: string
+ *               message:
+ *                 type: string
+ *               cheekboneWidth:
+ *                 type: number
+ *               faceLength:
+ *                 type: number
+ *               foreheadWidth:
+ *                 type: number
+ *               jawWidth:
+ *                 type: number
+ *               pupilHeight:
+ *                 type: string
+ *               pupillaryDistance:
+ *                 type: string
+ *               nasoPupillaryDistance:
+ *                 type: object
+ *                 properties:
+ *                   leftEye:
+ *                     type: string
+ *                   rightEye:
+ *                     type: string
+ *     responses:
+ *       200:
+ *         description: Measurement saved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Measurement saved successfully
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Missing or invalid input data
+ *       401:
+ *         description: Unauthorized - missing or invalid token
+ *       500:
+ *         description: Server error
+ */
+router.post("/saveMeasurement", authMiddleware, saveMeasurement);
+
+/**
+ * @swagger
+ * /api/user/startTest:
+ *   post:
+ *     summary: Start a new visual acuity test
+ *     tags: [Visual Acuity Test]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - activeEye
+ *             properties:
+ *               activeEye:
+ *                 type: string
+ *                 enum: [left, right]
+ *     responses:
+ *       200:
+ *         description: Test started successfully
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+router.post("/startTest", authMiddleware, startTest);
+
+/**
+ * @swagger
+ * /api/user/getQuestion:
+ *   get:
+ *     summary: Get the current question for the test
+ *     tags: [Visual Acuity Test]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: testId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID of the active test
+ *     responses:
+ *       200:
+ *         description: Returns question, options, and size
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Test not found
+ *       500:
+ *         description: Server error
+ */
+router.get("/getQuestion", authMiddleware, getQuestion);
+
+/**
+ * @swagger
+ * /api/user/submitAnswer:
+ *   post:
+ *     summary: Submit an answer for the current visual acuity question
+ *     tags: [Visual Acuity Test]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - testId
+ *               - selectedOption
+ *               - correct
+ *               - size
+ *             properties:
+ *               testId:
+ *                 type: string
+ *               selectedOption:
+ *                 type: string
+ *               correct:
+ *                 type: boolean
+ *               size:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Answer submitted successfully and size updated
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+router.post("/submitAnswer", authMiddleware, submitAnswer);
+
+/**
+ * @swagger
+ * /api/user/getResult:
+ *   get:
+ *     summary: Get final result of visual acuity test
+ *     tags: [Visual Acuity Test]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: testId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Test result retrieved successfully
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Test not found
+ *       500:
+ *         description: Server error
+ */
+router.get("/getResult", authMiddleware, getResult);
+
+
+router.post("/startColorTest", authMiddleware, startColorTest);
+router.get("/getSingleColorQuestion", authMiddleware, getSingleColorQuestion);
+router.post("/submitColorAnswer", authMiddleware, submitColorAnswer);
+router.get("/getColorResults", authMiddleware, getColorResults);
+
+
 export default router;

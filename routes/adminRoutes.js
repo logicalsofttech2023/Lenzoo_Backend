@@ -31,6 +31,8 @@ import {
   getAllAppointments,
   updateAppointmentStatus,
   getOrderById,
+  addCenter,
+  getCenter,
 } from "../controllers/adminController.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
 import { uploadProfile } from "../middlewares/uploadMiddleware.js";
@@ -1248,7 +1250,6 @@ router.post(
   authMiddleware,
   updateAppointmentStatus
 );
-
 /**
  * @swagger
  * /api/admin/getOrderById:
@@ -1289,4 +1290,138 @@ router.post(
  *         description: Internal server error
  */
 router.get("/getOrderById", authMiddleware, getOrderById);
+
+/**
+ * @swagger
+ * /api/admin/getCenter:
+ *   get:
+ *     summary: Get the single test center (only one allowed)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Center fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Center fetched successfully
+ *                 status:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/Center'
+ *       404:
+ *         description: Center not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Center not found
+ *                 status:
+ *                   type: boolean
+ *                   example: false
+ *       500:
+ *         description: Server error while fetching center
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Failed to fetch center
+ *                 status:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ */
+router.get("/getCenter", authMiddleware, getCenter);
+
+
+/**
+ * @swagger
+ * /api/admin/addCenter:
+ *   post:
+ *     summary: Add a new test center
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - location
+ *               - city
+ *               - state
+ *               - pinCode
+ *               - contactNumber
+ *               - timeSlots
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 example: VisionCare Center
+ *               location:
+ *                 type: string
+ *                 example: 123 Main Street
+ *               city:
+ *                 type: string
+ *                 example: Mumbai
+ *               state:
+ *                 type: string
+ *                 example: Maharashtra
+ *               pinCode:
+ *                 type: string
+ *                 example: "400001"
+ *               contactNumber:
+ *                 type: string
+ *                 example: "9876543210"
+ *               timeSlots:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     time:
+ *                       type: string
+ *                       example: "10:00 AM"
+ *                     isBooked:
+ *                       type: boolean
+ *                       default: false
+ *     responses:
+ *       200:
+ *         description: Center added successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 status:
+ *                   type: boolean
+ *                 center:
+ *                   $ref: '#/components/schemas/Center'
+ *       400:
+ *         description: Validation error
+ *       500:
+ *         description: Server error
+ */
+router.post(
+  "/addCenter",
+  authMiddleware,
+  addCenter
+);
+
 export default router;

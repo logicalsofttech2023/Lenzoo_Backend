@@ -15,7 +15,7 @@ import Prescription from "../models/PrescriptionModel.js";
 import Cart from "../models/Cart.js";
 import { Order, ShippingAddress } from "../models/Order.js";
 import { Policy, FAQ } from "../models/PolicyModel.js";
-import Appointment from "../models/Appointment.js";
+import { Appointment, Center } from "../models/Appointment.js";
 import Notification from "../models/NotificationModel.js";
 import axios from "axios";
 import fs from "fs";
@@ -318,7 +318,7 @@ export const addMoneyToWallet = async (req, res) => {
       // }
     } catch (notificationError) {
       console.error("Notification Error:", notificationError);
-      // Notification fail hone par bhi success response bhej rahe hain
+      // Notification fail hone par bhi success response
     }
 
     res.status(200).json({
@@ -1119,13 +1119,39 @@ export const chatBot = async (req, res) => {
   }
 };
 
+export const getAvailableCenter = async (req, res) => {
+  try {
+    const center = await Center.findOne();
+    if (!center) {
+      return res
+        .status(404)
+        .json({ message: "Center not found", status: false });
+    }
+
+    res.status(200).json({
+      message: "Center fetched successfully",
+      status: true,
+      data: center,
+    });
+  } catch (err) {
+    res.status(500).json({
+      message: "Failed to fetch center",
+      status: false,
+      error: err.message,
+    });
+  }
+};
+
 export const bookAppointment = async (req, res) => {
   const userId = req.user.id;
   try {
-    const { date, time } = req.body;
+    const { centerId, date, time } = req.body;
 
-    if (!userId || !date || !time) {
-      return res.status(400).json({ message: "date, and time are required" });
+    if (!centerId || !date || !time) {
+      return res.status(400).json({
+        message: "centerId, date, and time are required",
+        status: false,
+      });
     }
 
     const user = await User.findById(userId);
@@ -1133,14 +1159,58 @@ export const bookAppointment = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const exists = await Appointment.findOne({ date, time, userId });
-    if (exists) {
+    // Validate center
+    const center = await Center.findById(centerId);
+    if (!center) {
       return res
-        .status(409)
-        .json({ message: "This time slot is already booked." });
+        .status(404)
+        .json({ message: "Center not found", status: false });
     }
 
-    const appointment = await Appointment.create({ userId, date, time });
+    // Check if appointment already exists for this user at this time and center
+    const alreadyBooked = await Appointment.findOne({
+      userId,
+      centerId,
+      date,
+      time,
+    });
+
+    if (alreadyBooked) {
+      return res.status(409).json({
+        message: "You have already booked this time slot at this center.",
+        status: false,
+      });
+    }
+
+    // Check if slot already full for other users (optional, if you allow only 1 booking per slot globally)
+    const slotTaken = await Appointment.findOne({
+      centerId,
+      date,
+      time,
+    });
+
+    if (slotTaken) {
+      return res.status(409).json({
+        message: "This time slot is already booked at the selected center.",
+        status: false,
+      });
+    }
+
+    // Create appointment
+    const appointment = await Appointment.create({
+      userId,
+      centerId,
+      date,
+      time,
+      notes,
+      status: "booked",
+    });
+
+    // ✅ Update time slot in Center
+    await Center.updateOne(
+      { _id: centerId, "timeSlots.time": time },
+      { $set: { "timeSlots.$.isBooked": true } }
+    );
 
     // ✅ Notification logic
     const title = "Appointment Booked";
@@ -1297,7 +1367,6 @@ export const getUserNotifications = async (req, res) => {
 
 export const measure = async (req, res) => {
   try {
-    const userId = req.user.id;
     const tempPath = req.file ? req.file.path : "";
     const formData = new FormData();
     formData.append("image", fs.createReadStream(tempPath));
@@ -1313,31 +1382,14 @@ export const measure = async (req, res) => {
       const data = response.data;
 
       const image = req.file ? req.file.path.split(path.sep).join("/") : "";
-      // Save in MongoDB
-      const newMeasurement = new FaceMeasurement({
-        userId,
-        imageUrl: image,
-        faceShape: data["Face Shape"],
-        measurementAccuracy: data["Measurement Accuracy"],
-        message: data["Message"],
-        cheekboneWidth: data["Detailed Measurements"]["Cheekbone Width (mm)"],
-        faceLength: data["Detailed Measurements"]["Face Length (mm)"],
-        foreheadWidth: data["Detailed Measurements"]["Forehead Width (mm)"],
-        jawWidth: data["Detailed Measurements"]["Jaw Width (mm)"],
-        nasoPupillaryDistance: {
-          leftEye: data["Naso-Pupillary Distance (NPD)"]["Left Eye"],
-          rightEye: data["Naso-Pupillary Distance (NPD)"]["Right Eye"],
-        },
-        pupilHeight: data["Pupil Height (PH)"],
-        pupillaryDistance: data["Pupillary Distance (PD)"],
-      });
-
-      await newMeasurement.save();
 
       res.status(200).json({
         success: true,
         message: "Measurement saved successfully",
-        data: newMeasurement,
+        data: {
+          imageUrl: image,
+          ...data,
+        },
       });
     } catch (error) {
       console.error("Error communicating with Python server:", error.message);
@@ -1345,6 +1397,69 @@ export const measure = async (req, res) => {
     }
   } catch (error) {
     console.log("Server error", error);
+    res.status(500).json({ message: "Server error", error });
+  }
+};
+
+export const saveMeasurement = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const {
+      imageUrl,
+      faceShape,
+      measurementAccuracy,
+      message,
+      cheekboneWidth,
+      faceLength,
+      foreheadWidth,
+      jawWidth,
+      pupilHeight,
+      pupillaryDistance,
+      nasoPupillaryDistance,
+    } = req.body;
+
+    if (
+      !imageUrl ||
+      !faceShape ||
+      !measurementAccuracy ||
+      !message ||
+      !cheekboneWidth ||
+      !faceLength ||
+      !foreheadWidth ||
+      !jawWidth ||
+      !pupilHeight ||
+      !pupillaryDistance ||
+      !nasoPupillaryDistance
+    ) {
+      return res
+        .status(400)
+        .json({ message: "All fields are required", status: false });
+    }
+
+    const newMeasurement = new FaceMeasurement({
+      userId,
+      imageUrl,
+      faceShape,
+      measurementAccuracy,
+      message,
+      cheekboneWidth,
+      faceLength,
+      foreheadWidth,
+      jawWidth,
+      pupilHeight,
+      pupillaryDistance,
+      nasoPupillaryDistance,
+    });
+
+    await newMeasurement.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Measurement saved successfully",
+      data: newMeasurement,
+    });
+  } catch (error) {
+    console.log("Error saving measurement:", error);
     res.status(500).json({ message: "Server error", error });
   }
 };

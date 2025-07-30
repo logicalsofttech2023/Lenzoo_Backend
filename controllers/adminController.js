@@ -10,7 +10,7 @@ import Transaction from "../models/TransactionModel.js";
 import PrescriptionModel from "../models/PrescriptionModel.js";
 import { Order } from "../models/Order.js";
 import Favorite from "../models/Favorite.js";
-import Appointment from "../models/Appointment.js";
+import { Appointment, Center } from "../models/Appointment.js";
 import { addNotification } from "../utils/AddNotification.js";
 
 const generateJwtToken = (user) => {
@@ -1144,6 +1144,98 @@ export const getUserDetailsById = async (req, res) => {
       success: false,
       message: "Error fetching user details",
       error: error.message,
+    });
+  }
+};
+
+export const addCenter = async (req, res) => {
+  const { name, location, city, state, pinCode, contactNumber, timeSlots } =
+    req.body;
+
+  if (
+    !name ||
+    !location ||
+    !city ||
+    !state ||
+    !pinCode ||
+    !contactNumber ||
+    !timeSlots
+  ) {
+    return res
+      .status(400)
+      .json({ message: "All fields are required", status: false });
+  }
+
+  try {
+    // Check if a center already exists
+    const existingCenter = await Center.findOne();
+
+    let center;
+
+    if (existingCenter) {
+      // Update the existing center
+      center = await Center.findByIdAndUpdate(
+        existingCenter._id,
+        {
+          name,
+          location,
+          city,
+          state,
+          pinCode,
+          contactNumber,
+          timeSlots,
+        },
+        { new: true }
+      );
+    } else {
+      // Create a new center
+      center = await Center.create({
+        name,
+        location,
+        city,
+        state,
+        pinCode,
+        contactNumber,
+        timeSlots,
+      });
+    }
+
+    return res.status(200).json({
+      message: existingCenter ? "Center updated" : "Center added",
+      status: true,
+      center,
+    });
+  } catch (err) {
+    console.error("Error in addCenter:", err);
+    return res
+      .status(500)
+      .json({
+        message: "Failed to save center",
+        status: false,
+        error: err.message,
+      });
+  }
+};
+
+export const getCenter = async (req, res) => {
+  try {
+    const center = await Center.findOne();
+    if (!center) {
+      return res
+        .status(404)
+        .json({ message: "Center not found", status: false });
+    }
+
+    res.status(200).json({
+      message: "Center fetched successfully",
+      status: true,
+      data: center,
+    });
+  } catch (err) {
+    res.status(500).json({
+      message: "Failed to fetch center",
+      status: false,
+      error: err.message,
     });
   }
 };
