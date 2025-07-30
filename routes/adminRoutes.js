@@ -33,6 +33,8 @@ import {
   getOrderById,
   addCenter,
   getCenter,
+  updateTimeSlotStatus,
+  getCenterById,
 } from "../controllers/adminController.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
 import { uploadProfile } from "../middlewares/uploadMiddleware.js";
@@ -1423,5 +1425,56 @@ router.post(
   authMiddleware,
   addCenter
 );
+
+/**
+ * @swagger
+ * /api/admin/updateTimeSlotStatus:
+ *   post:
+ *     summary: Update the availability status of a specific time slot in a center
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - centerId
+ *               - time
+ *               - status
+ *             properties:
+ *               centerId:
+ *                 type: string
+ *                 example: "64d9b9d6b01b8e6f7b8b9c24"
+ *               time:
+ *                 type: string
+ *                 example: "08:00 AM - 09:00 AM"
+ *               status:
+ *                 type: string
+ *                 example: available
+ *     responses:
+ *       200:
+ *         description: Time slot status updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 status:
+ *                   type: string
+ *                 updatedCenter:
+ *                   $ref: '#/components/schemas/Center'
+ *       404:
+ *         description: Center or time slot not found
+ *       500:
+ *         description: Server error
+ */
+router.post("/updateTimeSlotStatus", authMiddleware, updateTimeSlotStatus);
+
+router.get("/getCenterById", getCenterById);
 
 export default router;

@@ -1207,19 +1207,41 @@ export const addCenter = async (req, res) => {
     });
   } catch (err) {
     console.error("Error in addCenter:", err);
-    return res
-      .status(500)
-      .json({
-        message: "Failed to save center",
-        status: false,
-        error: err.message,
-      });
+    return res.status(500).json({
+      message: "Failed to save center",
+      status: false,
+      error: err.message,
+    });
   }
 };
 
 export const getCenter = async (req, res) => {
   try {
     const center = await Center.findOne();
+    if (!center) {
+      return res
+        .status(404)
+        .json({ message: "Center not found", status: false });
+    }
+
+    res.status(200).json({
+      message: "Center fetched successfully",
+      status: true,
+      data: center,
+    });
+  } catch (err) {
+    res.status(500).json({
+      message: "Failed to fetch center",
+      status: false,
+      error: err.message,
+    });
+  }
+};
+
+export const getCenterById = async (req, res) => {
+  try {
+    const { id } = req.query;
+    const center = await Center.findById(id);
     if (!center) {
       return res
         .status(404)
@@ -1298,23 +1320,40 @@ export const updateAppointmentStatus = async (req, res) => {
       return res.status(400).json({ message: "Invalid status value" });
     }
 
+    // Step 1: Update appointment status
     const updated = await Appointment.findByIdAndUpdate(
       id,
       { status },
       { new: true }
     );
 
-    if (!updated)
+    if (!updated) {
       return res
         .status(404)
         .json({ status: false, message: "Appointment not found" });
+    }
 
+    // Step 2: If cancelled or rescheduled, update isBooked=false in Center's time slot
+    if (status === "cancelled_by_admin" || status === "rescheduled") {
+      await Center.updateOne(
+        {
+          _id: updated.centerId,
+          "timeSlots.time": updated.time,
+        },
+        {
+          $set: {
+            "timeSlots.$.isBooked": false,
+          },
+        }
+      );
+    }
+
+    // Step 3: Get user and send notification
     const userDetail = await User.findById(updated.userId);
-
     if (!userDetail) {
       return res.status(400).json({ message: "User not found", status: false });
     }
-    // 🔔 Send Notification to user
+
     const user = userDetail._id;
     let title = "Appointment Status Updated";
     let body = `Your eye test appointment has been ${status.replaceAll(
@@ -1323,20 +1362,54 @@ export const updateAppointmentStatus = async (req, res) => {
     )}.`;
 
     try {
-      await addNotification(user._id, title, body);
-
-      // 🔁 Uncomment if using Firebase Cloud Messaging
-      // if (userDetail.firebaseToken) {
-      //   await sendNotification(user.firebaseToken, title, body);
-      // }
+      await addNotification(user, title, body);
+      // Optionally: send push notification via Firebase here
     } catch (notificationErr) {
       console.error("Notification error:", notificationErr);
     }
 
-    res
-      .status(200)
-      .json({ status: true, message: "Status updated", appointment: updated });
+    res.status(200).json({
+      status: true,
+      message: "Status updated",
+      appointment: updated,
+    });
   } catch (error) {
     res.status(500).json({ status: false, message: "Update failed", error });
+  }
+};
+
+export const updateTimeSlotStatus = async (req, res) => {
+  try {
+    const { centerId, time, status } = req.body;
+
+    if (!["available", "not_available"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status value" });
+    }
+
+    const center = await Center.findById(centerId);
+    if (!center) {
+      return res.status(404).json({ message: "Center not found" });
+    }
+
+    const slot = center.timeSlots.find((slot) => slot.time === time);
+    if (!slot) {
+      return res.status(404).json({ message: "Time slot not found" });
+    }
+
+    slot.status = status;
+
+    await center.save();
+
+    res.status(200).json({
+      message: "Time slot status updated successfully",
+      status: true,
+      data: center,
+    });
+  } catch (err) {
+    res.status(500).json({
+      message: "Failed to update time slot status",
+      status: false,
+      error: err.message,
+    });
   }
 };

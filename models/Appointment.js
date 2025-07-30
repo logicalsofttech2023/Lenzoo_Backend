@@ -11,6 +11,11 @@ const centerSchema = new mongoose.Schema({
     {
       time: String,
       isBooked: { type: Boolean, default: false },
+      status: {
+        type: String,
+        enum: ["available", "not_available"],
+        default: "available",
+      },
     },
   ],
   isActive: { type: Boolean, default: true },

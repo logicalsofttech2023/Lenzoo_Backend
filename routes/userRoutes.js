@@ -184,6 +184,10 @@ router.post(
  *               profileImage:
  *                 type: string
  *                 format: binary
+ *               address:
+ *                 type: string
+ *               dob:
+ *                 type: string
  *     responses:
  *       200:
  *         description: Profile updated
@@ -927,7 +931,6 @@ router.post(
   cancelAppointmentByUser
 );
 
-
 /**
  * @swagger
  * /api/user/getAvailableCenter:
@@ -1456,11 +1459,120 @@ router.post("/submitAnswer", authMiddleware, submitAnswer);
  */
 router.get("/getResult", authMiddleware, getResult);
 
-
+/**
+ * @swagger
+ * /api/user/startColorTest:
+ *   post:
+ *     summary: Start a new color vision test
+ *     tags: [Contrast Test]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - activeEye
+ *             properties:
+ *               activeEye:
+ *                 type: string
+ *                 enum: [left, right]
+ *                 example: right
+ *     responses:
+ *       200:
+ *         description: Test started successfully
+ *       400:
+ *         description: Missing required fields
+ *       500:
+ *         description: Server error
+ */
 router.post("/startColorTest", authMiddleware, startColorTest);
-router.get("/getSingleColorQuestion", authMiddleware, getSingleColorQuestion);
-router.post("/submitColorAnswer", authMiddleware, submitColorAnswer);
-router.get("/getColorResults", authMiddleware, getColorResults);
 
+/**
+ * @swagger
+ * /api/user/getSingleColorQuestion:
+ *   get:
+ *     summary: Get a single color test question
+ *     tags: [Contrast Test]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Fetched a color test question
+ *       404:
+ *         description: No more questions or test not started
+ *       500:
+ *         description: Server error
+ */
+router.get("/getSingleColorQuestion", authMiddleware, getSingleColorQuestion);
+
+/**
+ * @swagger
+ * /api/user/submitColorAnswer:
+ *   post:
+ *     summary: Submit an answer to a color test question
+ *     tags: [Contrast Test]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - selectedIndex
+ *               - correct
+ *               - colors
+ *               - differentColor
+ *               - opacityLevel
+ *             properties:
+ *               selectedIndex:
+ *                 type: integer
+ *                 example: 3
+ *               correct:
+ *                 type: boolean
+ *                 example: true
+ *               colors:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: color
+ *                 example: ["#FF0000", "#FF0000", "#FF0000", "#FFFF00"]
+ *               differentColor:
+ *                 type: string
+ *                 example: "#FFFF00"
+ *               opacityLevel:
+ *                 type: number
+ *                 example: 1
+ *     responses:
+ *       200:
+ *         description: Answer submitted successfully
+ *       400:
+ *         description: Invalid input
+ *       500:
+ *         description: Server error
+ */
+router.post("/submitColorAnswer", authMiddleware, submitColorAnswer);
+
+/**
+ * @swagger
+ * /api/user/getColorResults:
+ *   get:
+ *     summary: Get final results of the color test
+ *     tags: [Contrast Test]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Color test results returned
+ *       404:
+ *         description: No results found
+ *       500:
+ *         description: Server error
+ */
+router.get("/getColorResults", authMiddleware, getColorResults);
 
 export default router;

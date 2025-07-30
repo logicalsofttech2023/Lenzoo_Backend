@@ -197,7 +197,7 @@ export const completeRegistration = async (req, res) => {
 export const updateProfile = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { firstName, userEmail, lastName } = req.body;
+    const { firstName, userEmail, lastName, address, dob } = req.body;
 
     // Fixing profile image path
     const profileImage = req.file
@@ -214,6 +214,8 @@ export const updateProfile = async (req, res) => {
     if (userEmail) user.userEmail = userEmail;
     if (profileImage) user.profileImage = profileImage;
     if (lastName) user.lastName = lastName;
+    if (address) user.address = address;
+    if (dob) user.dob = dob;
 
     await user.save();
 
