@@ -900,9 +900,9 @@ router.post("/bookAppointment", authMiddleware, bookAppointment);
  *           schema:
  *             type: object
  *             required:
- *               - appointmentId
+ *               - id
  *             properties:
- *               appointmentId:
+ *               id:
  *                 type: string
  *                 example: "64e8f31248a4bc2fe0d8a345"
  *     responses:

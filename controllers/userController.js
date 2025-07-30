@@ -1202,7 +1202,6 @@ export const bookAppointment = async (req, res) => {
       centerId,
       date,
       time,
-      notes,
       status: "booked",
     });
 
@@ -1228,44 +1227,45 @@ export const bookAppointment = async (req, res) => {
     }
     return res.status(201).json({ message: "Appointment booked", appointment });
   } catch (error) {
+    console.error("Error booking appointment:", error);
     res.status(500).json({ message: "Booking failed", error });
   }
 };
 
 export const cancelAppointmentByUser = async (req, res) => {
   try {
-    const { id } = req.query;
-    const appointment = await Appointment.findByIdAndUpdate(
-      id,
-      { status: "cancelled_by_user" },
-      { new: true }
-    );
-    if (!appointment)
-      return res
-        .status(404)
-        .json({ status: false, message: "Appointment not found" });
+    const { id } = req.body;
 
-    const user = await User.findById(appointment.userId);
-
-    if (user) {
-      const title = "Appointment Cancelled";
-      const body = `Your appointment on ${appointment.date} at ${appointment.time} has been cancelled.`;
-
-      try {
-        await addNotification(user._id, title, body);
-
-        // 🔁 Uncomment if using Firebase
-        // if (user.firebaseToken) {
-        //   await sendNotification(user.firebaseToken, title, body);
-        // }
-      } catch (notificationErr) {
-        console.error("Notification error:", notificationErr);
-      }
+    // 1. Find the appointment
+    const appointment = await Appointment.findById(id);
+    if (!appointment) {
+      return res.status(404).json({
+        status: false,
+        message: "Appointment not found",
+      });
     }
 
-    res.status(200).json({ message: "Appointment cancelled", appointment });
+    // 2. Update the appointment status
+    appointment.status = "cancelled_by_user";
+    await appointment.save();
+
+    // 3. Update isBooked = false in center's timeSlots
+    await Center.updateOne(
+      { _id: appointment.centerId, "timeSlots.time": appointment.time },
+      { $set: { "timeSlots.$.isBooked": false } }
+    );
+
+    return res.status(200).json({
+      status: true,
+      message: "Appointment cancelled and slot updated",
+    });
   } catch (error) {
-    res.status(500).json({ message: "Failed to cancel", error });
+    console.error("Cancel Error:", error);
+    return res.status(500).json({
+      status: false,
+      message: "Server error while cancelling appointment",
+      error,
+    });
   }
 };
 
@@ -1274,9 +1274,10 @@ export const rescheduleAppointment = async (req, res) => {
     const { appointmentId, newDate, newTime } = req.body;
 
     if (!appointmentId || !newDate || !newTime) {
-      return res
-        .status(400)
-        .json({ message: "appointmentId, newDate, and newTime are required" });
+      return res.status(400).json({
+        message: "appointmentId, newDate, and newTime are required",
+        status: false,
+      });
     }
 
     const appointment = await Appointment.findById(appointmentId);
@@ -1286,21 +1287,55 @@ export const rescheduleAppointment = async (req, res) => {
         .json({ message: "Appointment not found", status: false });
     }
 
+    if (appointment.date === newDate && appointment.time === newTime) {
+      return res.status(400).json({
+        message: "New date and time must be different from current appointment",
+        status: false,
+      });
+    }
+
+    // Check if new slot is already booked at this center
+    const slotTaken = await Appointment.findOne({
+      centerId: appointment.centerId,
+      date: newDate,
+      time: newTime,
+    });
+
+    if (slotTaken) {
+      return res.status(409).json({
+        message: "This time slot is already booked at the selected center.",
+        status: false,
+      });
+    }
+
+    // ✅ Update old slot to available
+    await Center.updateOne(
+      { _id: appointment.centerId, "timeSlots.time": appointment.time },
+      { $set: { "timeSlots.$.isBooked": false } }
+    );
+
+    // ✅ Update new slot to booked
+    await Center.updateOne(
+      { _id: appointment.centerId, "timeSlots.time": newTime },
+      { $set: { "timeSlots.$.isBooked": true } }
+    );
+
+    // ✅ Update appointment
     appointment.date = newDate;
     appointment.time = newTime;
     appointment.status = "rescheduled";
-
     await appointment.save();
 
     const userDetail = await User.findById(appointment.userId);
+
     if (userDetail) {
-      let title = "Appointment Rescheduled";
-      let body = `Your eye test appointment has been rescheduled to ${newDate} at ${newTime}.`;
+      const title = "Appointment Rescheduled";
+      const body = `Your eye test appointment has been rescheduled to ${newDate} at ${newTime}.`;
 
       try {
         await addNotification(userDetail._id, title, body);
 
-        // Optional: Firebase push notification
+        // Optional Firebase push notification
         // if (userDetail.firebaseToken) {
         //   await sendNotification(userDetail.firebaseToken, title, body);
         // }
@@ -1309,20 +1344,27 @@ export const rescheduleAppointment = async (req, res) => {
       }
     }
 
-    return res
-      .status(200)
-      .json({ message: "Appointment rescheduled", status: true, appointment });
+    return res.status(200).json({
+      message: "Appointment rescheduled successfully",
+      status: true,
+      appointment,
+    });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Reschedule failed", status: false, error });
+    console.error("Reschedule error:", error);
+    return res.status(500).json({
+      message: "Reschedule failed",
+      status: false,
+      error,
+    });
   }
 };
 
 export const getAppointmentsByUser = async (req, res) => {
   try {
     const userId = req.user.id;
-    const appointments = await Appointment.find({ userId }).sort({ date: -1 });
+    const appointments = await Appointment.find({ userId })
+      .populate("centerId", "name location city state pinCode contactNumber")
+      .sort({ date: -1 });
 
     if (!appointments) {
       res.status(400).json({
@@ -1334,6 +1376,8 @@ export const getAppointmentsByUser = async (req, res) => {
       .status(200)
       .json({ status: true, message: "Appointments fetched", appointments });
   } catch (error) {
+    console.log(error);
+
     res
       .status(500)
       .json({ message: "Error fetching user's appointments", error });
