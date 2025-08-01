@@ -40,14 +40,27 @@ import { uploadProfile } from "../middlewares/uploadMiddleware.js";
 import { prescription } from "../middlewares/prescription.js";
 import optionalAuth from "../middlewares/optionalMiddleware.js";
 import {
-  getColorResults,
+  getAllTestResult,
+  getAstigmatismQuestion,
+  getAstigmatismResult,
+  getColorQuestion,
+  getColorTestResult,
+  getContrastResults,
   getQuestion,
   getResult,
-  getSingleColorQuestion,
+  getSingleContrastQuestion,
+  getTumblingEQuestion,
+  getTumblingEResult,
+  startAstigmatismTest,
   startColorTest,
+  startContrastTest,
   startTest,
+  startTumblingETest,
   submitAnswer,
+  submitAstigmatismAnswer,
   submitColorAnswer,
+  submitContrastAnswer,
+  submitTumblingEAnswer,
 } from "../controllers/visualAcuityController.js";
 
 const router = express.Router();
@@ -1461,7 +1474,7 @@ router.get("/getResult", authMiddleware, getResult);
 
 /**
  * @swagger
- * /api/user/startColorTest:
+ * /api/user/startContrastTest:
  *   post:
  *     summary: Start a new color vision test
  *     tags: [Contrast Test]
@@ -1488,11 +1501,11 @@ router.get("/getResult", authMiddleware, getResult);
  *       500:
  *         description: Server error
  */
-router.post("/startColorTest", authMiddleware, startColorTest);
+router.post("/startContrastTest", authMiddleware, startContrastTest);
 
 /**
  * @swagger
- * /api/user/getSingleColorQuestion:
+ * /api/user/getSingleContrastQuestion:
  *   get:
  *     summary: Get a single color test question
  *     tags: [Contrast Test]
@@ -1506,11 +1519,15 @@ router.post("/startColorTest", authMiddleware, startColorTest);
  *       500:
  *         description: Server error
  */
-router.get("/getSingleColorQuestion", authMiddleware, getSingleColorQuestion);
+router.get(
+  "/getSingleContrastQuestion",
+  authMiddleware,
+  getSingleContrastQuestion
+);
 
 /**
  * @swagger
- * /api/user/submitColorAnswer:
+ * /api/user/submitContrastAnswer:
  *   post:
  *     summary: Submit an answer to a color test question
  *     tags: [Contrast Test]
@@ -1555,11 +1572,11 @@ router.get("/getSingleColorQuestion", authMiddleware, getSingleColorQuestion);
  *       500:
  *         description: Server error
  */
-router.post("/submitColorAnswer", authMiddleware, submitColorAnswer);
+router.post("/submitContrastAnswer", authMiddleware, submitContrastAnswer);
 
 /**
  * @swagger
- * /api/user/getColorResults:
+ * /api/user/getContrastResults:
  *   get:
  *     summary: Get final results of the color test
  *     tags: [Contrast Test]
@@ -1573,6 +1590,305 @@ router.post("/submitColorAnswer", authMiddleware, submitColorAnswer);
  *       500:
  *         description: Server error
  */
-router.get("/getColorResults", authMiddleware, getColorResults);
+router.get("/getContrastResults", authMiddleware, getContrastResults);
 
+/**
+ * @swagger
+ * /api/user/startColorTest:
+ *   post:
+ *     summary: Start the color test
+ *     tags: [Color Test]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - activeEye
+ *             properties:
+ *               activeEye:
+ *                 type: string
+ *                 enum: [left, right]
+ *                 description: The eye being tested
+ *                 example: right
+ *     responses:
+ *       200:
+ *         description: Color test started successfully
+ *       400:
+ *         description: Invalid input
+ *       500:
+ *         description: Server error
+ */
+router.post("/startColorTest", authMiddleware, startColorTest);
+
+/**
+ * @swagger
+ * /api/user/getColorQuestion:
+ *   get:
+ *     summary: Get a new color vision question
+ *     tags: [Color Test]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Question fetched successfully
+ *       404:
+ *         description: No more questions
+ *       500:
+ *         description: Server error
+ */
+router.get("/getColorQuestion", authMiddleware, getColorQuestion);
+
+/**
+ * @swagger
+ * /api/user/submitColorAnswer:
+ *   post:
+ *     summary: Submit answer for current color question
+ *     tags: [Color Test]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - selectedOption
+ *             properties:
+ *               selectedOption:
+ *                 type: string
+ *                 example: "8"
+ *     responses:
+ *       200:
+ *         description: Answer submitted successfully
+ *       400:
+ *         description: Invalid answer
+ *       500:
+ *         description: Server error
+ */
+router.post("/submitColorAnswer", authMiddleware, submitColorAnswer);
+
+/**
+ * @swagger
+ * /api/user/getColorTestResult:
+ *   get:
+ *     summary: Get the final result of the color test
+ *     tags: [Color Test]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Final test result
+ *       404:
+ *         description: Result not found
+ *       500:
+ *         description: Server error
+ */
+router.get("/getColorTestResult", authMiddleware, getColorTestResult);
+
+/**
+ * @swagger
+ * /api/user/startAstigmatismTest:
+ *   post:
+ *     summary: Start the astigmatism test
+ *     tags: [Astigmatism Test]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Test started successfully
+ *       500:
+ *         description: Server error
+ */
+router.post("/startAstigmatismTest", authMiddleware, startAstigmatismTest);
+
+/**
+ * @swagger
+ * /api/user/getAstigmatismQuestion:
+ *   get:
+ *     summary: Get current question/image for astigmatism test
+ *     tags: [Astigmatism Test]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Question/image data returned
+ *       404:
+ *         description: No question found
+ *       500:
+ *         description: Server error
+ */
+router.get("/getAstigmatismQuestion", authMiddleware, getAstigmatismQuestion);
+
+/**
+ * @swagger
+ * /api/user/submitAstigmatismAnswer:
+ *   post:
+ *     summary: Submit user answer for astigmatism test
+ *     tags: [Astigmatism Test]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               selectedOption:
+ *                 type: string
+ *                 example: "Yes"
+ *     responses:
+ *       200:
+ *         description: Answer submitted successfully
+ *       400:
+ *         description: Invalid input
+ *       500:
+ *         description: Server error
+ */
+router.post(
+  "/submitAstigmatismAnswer",
+  authMiddleware,
+  submitAstigmatismAnswer
+);
+
+/**
+ * @swagger
+ * /api/user/getAstigmatismResult:
+ *   get:
+ *     summary: Get final result of the astigmatism test
+ *     tags: [Astigmatism Test]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Astigmatism test result
+ *       404:
+ *         description: Result not found
+ *       500:
+ *         description: Server error
+ */
+router.get("/getAstigmatismResult", authMiddleware, getAstigmatismResult);
+
+/**
+ * @swagger
+ * /api/user/startTumblingETest:
+ *   post:
+ *     summary: Start the astigmatism test
+ *     tags: [TumblingE Test]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Test started successfully
+ *       500:
+ *         description: Server error
+ */
+router.post("/startTumblingETest", authMiddleware, startTumblingETest);
+
+/**
+ * @swagger
+ * /api/user/getTumblingEQuestion:
+ *   get:
+ *     summary: Get current question/image for TumblingE test
+ *     tags: [TumblingE Test]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Question/image data returned
+ *       404:
+ *         description: No question found
+ *       500:
+ *         description: Server error
+ */
+router.get("/getTumblingEQuestion", authMiddleware, getTumblingEQuestion);
+/**
+ * @swagger
+ * /api/tumblingE/submitTumblingEAnswer:
+ *   post:
+ *     summary: Submit answer for Tumbling E Test
+ *     tags: [TumblingE Test]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - selectedDirection
+ *             properties:
+ *               selectedDirection:
+ *                 type: string
+ *                 enum: [up, down, left, right]
+ *                 example: down
+ *     responses:
+ *       200:
+ *         description: Answer submitted successfully and next question returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 finished:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: Answer submitted
+ *                 currentStep:
+ *                   type: number
+ *                   example: 3
+ *                 question:
+ *                   type: object
+ *                   properties:
+ *                     instruction:
+ *                       type: string
+ *                     image:
+ *                       type: string
+ *                       example: e_up.svg
+ *                     direction:
+ *                       type: string
+ *                       example: up
+ *                     size:
+ *                       type: string
+ *                       example: 50px
+ *                     options:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *       400:
+ *         description: Invalid input or test not found
+ *       500:
+ *         description: Server error
+ */
+router.post("/submitTumblingEAnswer", authMiddleware, submitTumblingEAnswer);
+/**
+ * @swagger
+ * /api/user/getTumblingEResult:
+ *   get:
+ *     summary: Get final result of the astigmatism test
+ *     tags: [TumblingE Test]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: TumblingE test result
+ *       404:
+ *         description: Result not found
+ *       500:
+ *         description: Server error
+ */
+router.get("/getTumblingEResult", authMiddleware, getTumblingEResult);
+
+router.get("/getAllTestResult", authMiddleware, getAllTestResult);
 export default router;

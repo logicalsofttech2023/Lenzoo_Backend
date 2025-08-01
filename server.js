@@ -20,6 +20,7 @@ expireOldPurchases();
 // Make uploads folder publicly accessible
 const __dirname = path.resolve();
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/ColorTestImages", express.static(path.join(__dirname, "ColorTestImages")));
 
 // Initialize Firebase
 // const serviceAccount = path.join(__dirname, "perfect-jodi-firebase.json");
